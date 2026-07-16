@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dev-dist/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+.env
+.env.local
+.DS_Store
+*.log
