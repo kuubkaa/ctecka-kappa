@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   addWithoutBarcode,
+  bumpQty,
   db,
   deleteSession,
   getLines,
@@ -183,7 +184,7 @@ export function SessionScreen() {
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     aria-label={`Ubrat ${line.name}`}
-                    onClick={() => setQty(line.itemId, line.qty - 1)}
+                    onClick={() => bumpQty(line.itemId, -1)}
                     className="h-10 w-10 rounded-lg bg-slate-100 text-xl font-medium active:bg-slate-200"
                   >
                     −
@@ -196,7 +197,7 @@ export function SessionScreen() {
                   </button>
                   <button
                     aria-label={`Přidat ${line.name}`}
-                    onClick={() => setQty(line.itemId, line.qty + 1)}
+                    onClick={() => bumpQty(line.itemId, 1)}
                     className="h-10 w-10 rounded-lg bg-slate-100 text-xl font-medium active:bg-slate-200"
                   >
                     +

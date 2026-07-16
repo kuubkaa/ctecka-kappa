@@ -1,4 +1,4 @@
-import Dexie, { type EntityTable } from 'dexie'
+import Dexie, { add, type EntityTable } from 'dexie'
 
 /** A barcode the user has named. The catalog builds itself up as they scan. */
 export interface Product {
@@ -77,8 +77,15 @@ export type ScanOutcome =
  * Records one scan. Unknown codes are reported back rather than guessed at —
  * the UI asks the user to name them, which is how the catalog gets built.
  *
- * Runs in a transaction because a fast scanner can fire the same code twice
- * before the first read-modify-write commits, which would lose a count.
+ * The count is incremented with Dexie's `add()`, never by reading a number and
+ * writing back a bigger one. That distinction is invisible on one device — the
+ * transaction covers it — but decides correctness once two devices sync:
+ *
+ *     phone counts 50 offline    PC sets the count to 3
+ *     read-modify-write -> 50 or 3, never 53
+ *     add(1) x50        -> replayed against current state -> 53
+ *
+ * A wrong count is silent, plausible, and ends up on a protocol someone signs.
  */
 export async function recordScan(sessionId: number, code: string): Promise<ScanOutcome> {
   return db.transaction('rw', db.products, db.items, async () => {
@@ -87,8 +94,10 @@ export async function recordScan(sessionId: number, code: string): Promise<ScanO
 
     const existing = await db.items.where({ sessionId, code }).first()
     if (existing) {
-      const qty = existing.qty + 1
-      await db.items.update(existing.id, { qty, updatedAt: Date.now() })
+      await db.items.update(existing.id, { qty: add(1), updatedAt: Date.now() })
+      // Re-read rather than compute: `add(1)` is an instruction, not a value, so
+      // the resulting number is the database's to decide, not ours to guess.
+      const qty = (await db.items.get(existing.id))?.qty ?? existing.qty + 1
       return { kind: 'counted', product, qty }
     }
     await db.items.add({ sessionId, code, qty: 1, updatedAt: Date.now() } as Item)
@@ -102,7 +111,7 @@ export async function nameAndCount(sessionId: number, code: string, name: string
     await db.products.put({ code, name: name.trim(), createdAt: Date.now() })
     const existing = await db.items.where({ sessionId, code }).first()
     if (existing) {
-      await db.items.update(existing.id, { qty: existing.qty + 1, updatedAt: Date.now() })
+      await db.items.update(existing.id, { qty: add(1), updatedAt: Date.now() })
     } else {
       await db.items.add({ sessionId, code, qty: 1, updatedAt: Date.now() } as Item)
     }
@@ -141,13 +150,34 @@ export async function addWithoutBarcode(
 
     const item = await db.items.where({ sessionId, code }).first()
     if (item) {
-      await db.items.update(item.id, { qty: item.qty + Math.trunc(qty), updatedAt: Date.now() })
+      await db.items.update(item.id, { qty: add(Math.trunc(qty)), updatedAt: Date.now() })
     } else {
       await db.items.add({ sessionId, code, qty: Math.trunc(qty), updatedAt: Date.now() } as Item)
     }
   })
 }
 
+/**
+ * Nudges a count by ±1 (the list's + / − buttons).
+ *
+ * Takes a delta, not a target: computing `line.qty + 1` in the UI and writing the
+ * result back is the same read-modify-write that loses counts across devices, just
+ * with a longer round trip through React.
+ */
+export async function bumpQty(itemId: number, delta: number): Promise<void> {
+  await db.transaction('rw', db.items, async () => {
+    await db.items.update(itemId, { qty: add(delta), updatedAt: Date.now() })
+    const now = await db.items.get(itemId)
+    if (now && now.qty <= 0) await db.items.delete(itemId)
+  })
+}
+
+/**
+ * Sets a count outright — "there are 48 on the shelf".
+ *
+ * Deliberately absolute, unlike `bumpQty`: the user is stating a fact they just
+ * counted, so their number must win over anything a device counted earlier.
+ */
 export async function setQty(itemId: number, qty: number): Promise<void> {
   if (qty <= 0) {
     await db.items.delete(itemId)
