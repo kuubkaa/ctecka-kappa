@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import { App } from './App'
+import { migrateFromLegacy } from './db'
 import { warmUpScanner } from './lib/scanner'
 import './index.css'
 
@@ -15,8 +16,24 @@ warmUpScanner()
 // iOS's 7-day eviction, but this covers the in-browser case and Android.
 void navigator.storage?.persist?.().catch(() => {})
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+const root = createRoot(document.getElementById('root')!)
+
+/**
+ * Move any pre-sync data across before the first render.
+ *
+ * Rendering first would flash an empty stocktake list at someone who has months of
+ * counts — they'd reasonably conclude the update ate their data. A failed migration
+ * must not block the app either: the old database is left intact, so the worst case
+ * is an empty app with the data still recoverable rather than a white screen.
+ */
+migrateFromLegacy()
+  .catch((err) => {
+    console.error('Migrace ze starší verze selhala; stará data zůstala nedotčená.', err)
+  })
+  .finally(() => {
+    root.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+  })

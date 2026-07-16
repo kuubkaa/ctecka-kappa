@@ -21,7 +21,7 @@ import { Button, ConfirmDialog, Dialog, EmptyState, Field } from '../components/
 
 export function SessionScreen() {
   const { id } = useParams()
-  const sessionId = Number(id)
+  const sessionId = id ?? ''
   const navigate = useNavigate()
 
   const [scanning, setScanning] = useState(false)
@@ -101,7 +101,7 @@ export function SessionScreen() {
   async function saveEdit() {
     if (!editing) return
     const qty = Number(editQty)
-    if (Number.isFinite(qty)) await setQty(editing.itemId, Math.max(0, Math.trunc(qty)))
+    if (Number.isFinite(qty)) await setQty(sessionId, editing.code, Math.max(0, Math.trunc(qty)))
     if (editName.trim() && editName.trim() !== editing.name) {
       await renameProduct(editing.code, editName)
     }
@@ -167,7 +167,7 @@ export function SessionScreen() {
           <ul className="space-y-2">
             {lines.map((line) => (
               <li
-                key={line.itemId}
+                key={line.code}
                 className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm"
               >
                 <button
@@ -184,7 +184,7 @@ export function SessionScreen() {
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     aria-label={`Ubrat ${line.name}`}
-                    onClick={() => bumpQty(line.itemId, -1)}
+                    onClick={() => bumpQty(sessionId, line.code, -1)}
                     className="h-10 w-10 rounded-lg bg-slate-100 text-xl font-medium active:bg-slate-200"
                   >
                     −
@@ -197,7 +197,7 @@ export function SessionScreen() {
                   </button>
                   <button
                     aria-label={`Přidat ${line.name}`}
-                    onClick={() => bumpQty(line.itemId, 1)}
+                    onClick={() => bumpQty(sessionId, line.code, 1)}
                     className="h-10 w-10 rounded-lg bg-slate-100 text-xl font-medium active:bg-slate-200"
                   >
                     +

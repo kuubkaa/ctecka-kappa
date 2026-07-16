@@ -87,8 +87,8 @@ test('concurrent bumps in both directions settle on the right number', async ({ 
 
     // 40 up, 15 down, all at once: 100 + 40 - 15 = 125.
     await Promise.all([
-      ...Array.from({ length: 40 }, () => db.bumpQty(line.itemId, 1)),
-      ...Array.from({ length: 15 }, () => db.bumpQty(line.itemId, -1)),
+      ...Array.from({ length: 40 }, () => db.bumpQty(sessionId, line.code, 1)),
+      ...Array.from({ length: 15 }, () => db.bumpQty(sessionId, line.code, -1)),
     ])
 
     const lines = await db.getLines(sessionId)

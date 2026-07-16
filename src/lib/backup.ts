@@ -1,17 +1,30 @@
-import { db, type Item, type Product, type Session, type Settings } from '../db'
+import {
+  db,
+  itemKey,
+  newId,
+  type Item,
+  type Product,
+  type Session,
+  type Settings,
+} from '../db'
 
 /**
  * Whole-database export and import.
  *
- * This is the app's only backup: everything lives in one phone's IndexedDB, so a
- * lost or wiped phone is a lost stocktake. It is also the migration tool and the
- * way out if the sync vendor ever stops suiting us — which is why the format is
- * plain, readable JSON rather than anything clever.
+ * This is the app's backup, its migration tool, and its way out if the sync vendor
+ * ever stops suiting us — which is why the format is plain readable JSON rather
+ * than anything clever.
  */
 
 const FORMAT = 'ctecka-kappa-backup'
-/** Bump only on a breaking shape change; `importBackup` must keep reading old ones. */
-const FORMAT_VERSION = 1
+/**
+ * 1 — pre-sync: numeric session/item ids.
+ * 2 — sync-ready: string session ids, items keyed by [sessionId+code].
+ *
+ * `importBackup` must keep reading version 1 forever. Files were handed out before
+ * the schema changed, and a backup you can no longer restore is not a backup.
+ */
+const FORMAT_VERSION = 2
 
 export interface Backup {
   format: typeof FORMAT
@@ -22,6 +35,10 @@ export interface Backup {
   items: Item[]
   settings: Settings[]
 }
+
+/** Either format's rows — ids are numbers in v1, strings in v2. */
+type AnySession = Omit<Session, 'id'> & { id: string | number }
+type AnyItem = { sessionId: string | number; code: string; qty: number; updatedAt: number }
 
 export async function exportBackup(): Promise<Backup> {
   // One transaction, so a scan landing mid-export can't produce a file where an
@@ -77,9 +94,9 @@ export interface ImportResult {
  * Merges a backup into whatever is already here — it never wipes.
  *
  * A restore that silently replaced the current device's counts would be the worst
- * possible bug in a backup feature, so sessions from the file are always added as
- * new stocktakes rather than matched against existing ones. Duplicating a stocktake
- * is annoying; erasing one is unrecoverable.
+ * possible bug in a backup feature, so sessions from the file are always given fresh
+ * ids and added as new stocktakes rather than matched against existing ones.
+ * Duplicating a stocktake is annoying; erasing one is unrecoverable.
  */
 export async function importBackup(backup: Backup): Promise<ImportResult> {
   return db.transaction('rw', db.products, db.sessions, db.items, async () => {
@@ -87,26 +104,39 @@ export async function importBackup(backup: Backup): Promise<ImportResult> {
     // put() lets an imported name correct a local one.
     await db.products.bulkPut(backup.products)
 
-    // Session ids are per-device counters, so the file's id 3 and this device's id 3
-    // are different stocktakes. Re-key on insert and remap the items to match.
-    const idMap = new Map<number, number>()
-    let sessions = 0
-    for (const session of backup.sessions) {
-      const { id: oldId, ...rest } = session
-      const newId = await db.sessions.add(rest as Session)
-      idMap.set(oldId, newId)
-      sessions++
+    // Always re-key, in both formats: a v1 file's session 1 and this device's
+    // session 1 are unrelated stocktakes, and even a v2 file could be a restore
+    // alongside the very rows it was exported from.
+    const idMap = new Map<string | number, string>()
+    for (const session of backup.sessions as AnySession[]) {
+      const id = newId()
+      idMap.set(session.id, id)
+      await db.sessions.add({ ...session, id })
     }
 
-    let items = 0
-    for (const item of backup.items) {
+    // Collapse by [sessionId+code]: v1 allowed several rows for one product in one
+    // stocktake, and the current key does not. Summing keeps the total honest.
+    const merged = new Map<string, Item>()
+    for (const item of backup.items as AnyItem[]) {
       const sessionId = idMap.get(item.sessionId)
-      if (sessionId === undefined) continue // orphan; its session wasn't in the file
-      const { id: _drop, ...rest } = item
-      await db.items.add({ ...rest, sessionId } as Item)
-      items++
+      if (!sessionId) continue // orphan; its session wasn't in the file
+      const key = itemKey(sessionId, item.code)
+      const seen = merged.get(key)
+      if (seen) seen.qty += item.qty
+      else
+        merged.set(key, {
+          sessionId,
+          code: item.code,
+          qty: item.qty,
+          updatedAt: item.updatedAt,
+        })
     }
+    await db.items.bulkPut([...merged.values()])
 
-    return { products: backup.products.length, sessions, items }
+    return {
+      products: backup.products.length,
+      sessions: backup.sessions.length,
+      items: merged.size,
+    }
   })
 }

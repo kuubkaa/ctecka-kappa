@@ -22,7 +22,7 @@ export function HomeScreen() {
   // fire dozens of reads on every render.
   const counts = useLiveQuery(async () => {
     const items = await db.items.toArray()
-    const map = new Map<number, { lines: number; pieces: number }>()
+    const map = new Map<string, { lines: number; pieces: number }>()
     for (const item of items) {
       const entry = map.get(item.sessionId) ?? { lines: 0, pieces: 0 }
       entry.lines += 1
