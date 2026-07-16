@@ -24,7 +24,7 @@
 - Skenování: `barcode-detector` (ponyfill nad zxing-wasm)
 - PDF: jsPDF 4 + jspdf-autotable 5 + vestavěný ořezaný Roboto
 - PWA: vite-plugin-pwa (offline, instalace na plochu)
-- Hosting: <!-- TODO: zatím nenasazeno. Potřeba HTTPS, jinak prohlížeč nepustí fotoaparát. -->
+- Hosting: GitHub Pages — https://kuubkaa.github.io/ctecka-kappa/ (repo `kuubkaa/ctecka-kappa`, veřejný)
 
 ## Pravidla
 
@@ -36,7 +36,10 @@
   - Dev server: `npm run dev`
   - Build: `npm run build` (spustí i typecheck)
   - Testy: `npm run test:e2e`
-- **Fotoaparát vyžaduje HTTPS.** Na `localhost` funguje, přes IP adresu v telefonu ne. Testování na reálném telefonu vyžaduje nasazení na https:// nebo tunel.
+  - Nasazení: `npm run deploy` — **testy nespouští, pusť je předtím sám**
+- **Fotoaparát vyžaduje HTTPS.** Na `localhost` funguje, přes IP adresu v telefonu ne. Testování na reálném telefonu = nasadit (`npm run deploy`) a otevřít živou adresu.
+- **Appka běží v podsložce `/ctecka-kappa/`** (`BASE` ve `vite.config.ts`). Platí i pro dev a testy schválně — cesty k fontům a wasm jsou na base citlivé a jinak by se rozbily až v produkci. Při změně adresy uprav `BASE` i `baseURL` v `playwright.config.ts`.
+- **CI zatím neběží.** `.github/workflows/deploy.yml` existuje, ale není nahraný — token nemá scope `workflow`. Zapnutí: `gh auth refresh -s workflow`, pak commitnout `.github/` a v Settings → Pages přepnout zdroj na GitHub Actions.
 
 ### Git a commity
 - Zatím není git repozitář. Až vznikne: pracuj na dev branch, nikdy nepushuj přímo na main.

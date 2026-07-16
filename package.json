@@ -11,7 +11,8 @@
     "font:subset": "node scripts/subset-font.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "deploy": "npm run build && gh-pages -d dist --dotfiles"
   },
   "dependencies": {
     "barcode-detector": "3.2.1",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "6.0.3",
     "fontkit": "^2.0.4",
+    "gh-pages": "^6.3.0",
     "pdfjs-dist": "^6.1.200",
     "sharp": "^0.35.3",
     "subset-font": "^2.5.0",

@@ -38,16 +38,39 @@ hosting zdarma stačí, viz níže).
 
 ## Nasazení
 
-Build je statický (`dist/`) — jde na jakýkoli hosting statických stránek. Žádná
-databáze, žádný backend, žádné proměnné prostředí.
+Appka běží na **https://kuubkaa.github.io/ctecka-kappa/**
 
 ```bash
-npm run build
-# obsah dist/ nahraj na hosting
+npm run deploy    # postaví a nahraje na GitHub Pages
 ```
 
-Hosting musí umět https (kvůli fotoaparátu). Pak stačí v telefonu otevřít adresu
-a dát *Přidat na plochu*.
+Build je statický (`dist/`) — žádná databáze, žádný backend, žádné proměnné
+prostředí. Šlo by ho hostovat kdekoli; podmínkou je jen https, jinak prohlížeč
+nepustí appku k fotoaparátu.
+
+> **Pozor:** `npm run deploy` nasazuje rovnou, bez spuštění testů. Před nasazením
+> spusť `npm run test:e2e`.
+
+### Automatické nasazení (zatím nezapnuté)
+
+V `.github/workflows/deploy.yml` čeká workflow, který po každém pushi do `main`
+spustí testy a teprve při jejich úspěchu nasadí. Není nahraný, protože přihlašovací
+token k GitHubu nemá oprávnění `workflow`. Zapnutí:
+
+```bash
+gh auth refresh -s workflow        # potvrdíš v prohlížeči
+git add .github && git commit -m "ci: deploy via GitHub Actions" && git push
+```
+
+Potom je ještě potřeba v *Settings → Pages* přepnout zdroj z větve `gh-pages`
+na *GitHub Actions*.
+
+### Adresa aplikace
+
+Appka běží v podsložce `/ctecka-kappa/`, což je zadrátované v `vite.config.ts`
+(`BASE`) — a schválně platí i pro vývoj a testy, aby se cesty k fontům a wasm
+dekodéru testovaly přesně tak, jak pojedou v produkci. Při změně adresy (vlastní
+doména, jiný název repozitáře) uprav `BASE` a `baseURL` v `playwright.config.ts`.
 
 ## Jak to funguje uvnitř
 
