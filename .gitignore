@@ -13,3 +13,10 @@ blob-report/
 .DS_Store
 *.log
 .playwright/
+
+# Dexie Cloud management credentials — MUST NOT reach the public repo.
+# dexie-cloud.key lets its holder administer the database. dexie-cloud.json only
+# holds the database URL (which ships in the client anyway) but is per-developer,
+# so the URL is passed to the app via VITE_DEXIE_CLOUD_URL instead.
+dexie-cloud.key
+dexie-cloud.json
