@@ -216,14 +216,6 @@ export function protocolFileName(session: Session): string {
   return `protokol-${slug}-${stamp}.pdf`
 }
 
-export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  // Revoking immediately can cancel the download on some mobile browsers.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
-}
+// Re-exported so callers of this module keep working; the implementation lives in
+// its own file so non-PDF callers don't drag jsPDF into the startup bundle.
+export { downloadBlob } from './download'
