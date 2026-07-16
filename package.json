@@ -17,6 +17,7 @@
   "dependencies": {
     "barcode-detector": "3.2.1",
     "dexie": "4.4.4",
+    "dexie-cloud-addon": "^4.4.13",
     "dexie-react-hooks": "^1.1.7",
     "jspdf": "4.2.1",
     "jspdf-autotable": "5.0.8",
@@ -32,6 +33,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "6.0.3",
+    "dexie-cloud": "^3.0.4",
     "fontkit": "^2.0.4",
     "gh-pages": "^6.3.0",
     "pdfjs-dist": "^6.1.200",

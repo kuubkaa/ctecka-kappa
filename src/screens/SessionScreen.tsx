@@ -144,7 +144,7 @@ export function SessionScreen() {
 
   return (
     <div className="mx-auto flex min-h-full max-w-2xl flex-col">
-      <header className="px-5 pb-3 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      <header className="order-1 px-5 pb-3 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <Link to="/" className="-ml-2 inline-block rounded-lg px-2 py-1 text-slate-600">
           ‹ Inventury
         </Link>
@@ -158,7 +158,7 @@ export function SessionScreen() {
         </p>
       </header>
 
-      <main className="flex-1 px-5 pb-4">
+      <main className="order-2 flex-1 px-5 pb-4 md:order-3 md:pt-4">
         {lines.length === 0 ? (
           <EmptyState title="Zatím nic naskenováno">
             Stiskni Skenovat a namiř fotoaparát na čárový kód.
@@ -227,7 +227,11 @@ export function SessionScreen() {
         </div>
       </main>
 
-      <div className="sticky bottom-0 flex gap-3 bg-gradient-to-t from-slate-100 via-slate-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      {/* On a phone the actions belong under the thumb, pinned to the bottom. On a
+          desktop that idiom strands them at the foot of the monitor, far from the
+          content — so on wide screens they sit under the header instead. Reordering
+          rather than duplicating keeps one set of buttons and one tab order. */}
+      <div className="order-3 sticky bottom-0 flex gap-3 bg-gradient-to-t from-slate-100 via-slate-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:static md:order-2 md:bg-none md:px-5 md:py-0">
         <Button variant="secondary" onClick={() => openManual('code')}>
           Ručně
         </Button>

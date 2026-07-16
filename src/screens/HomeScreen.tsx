@@ -51,14 +51,14 @@ export function HomeScreen() {
 
   return (
     <div className="mx-auto flex min-h-full max-w-2xl flex-col">
-      <header className="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      <header className="order-1 flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <h1 className="text-2xl font-bold">Inventury</h1>
         <Link to="/nastaveni" className="rounded-xl px-3 py-2 text-slate-600 active:bg-slate-200">
           Nastavení
         </Link>
       </header>
 
-      <main className="flex-1 px-5">
+      <main className="order-2 flex-1 px-5 md:order-3 md:pt-4">
         {sessions?.length === 0 && (
           <EmptyState title="Zatím žádná inventura">
             Založ novou inventuru a začni skenovat čárové kódy.
@@ -103,8 +103,10 @@ export function HomeScreen() {
         </ul>
       </main>
 
-      <div className="sticky bottom-0 bg-gradient-to-t from-slate-100 via-slate-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <Button className="w-full text-lg" onClick={openCreate}>
+      {/* Bottom bar on a phone (thumb reach), under the header on a desktop — see
+          the note in SessionScreen. */}
+      <div className="order-3 sticky bottom-0 bg-gradient-to-t from-slate-100 via-slate-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:static md:order-2 md:bg-none md:px-5 md:py-0">
+        <Button className="w-full text-lg md:w-auto" onClick={openCreate}>
           Nová inventura
         </Button>
       </div>
