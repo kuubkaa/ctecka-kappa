@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "icons": "node scripts/make-icons.mjs",
-    "deploy": "npm run build && gh-pages -d dist --dotfiles"
+    "deploy": "npm run build && gh-pages -d dist --dotfiles",
+    "sync:setup": "node scripts/sync-setup.mjs"
   },
   "dependencies": {
     "barcode-detector": "3.2.1",
