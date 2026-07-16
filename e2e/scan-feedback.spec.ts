@@ -79,17 +79,29 @@ test('camera scan counts the item and confirms loudly', async ({ page }) => {
  * formats are implementation detail — Tailwind v4 reports oklab(), not rgb() — but
  * "the screen turns green" is the whole point of the feature.
  */
+/** Waits for the wash overlay to be fully on or fully off. */
+const waitFlash = (page: Page, want: 'on' | 'off') =>
+  page.waitForFunction(
+    (w) => {
+      const el = document.querySelector('[aria-hidden]')
+      if (!el) return false
+      const o = parseFloat(getComputedStyle(el).opacity)
+      return w === 'on' ? o > 0.95 : o < 0.05
+    },
+    want,
+    { timeout: 4000, polling: 'raf' },
+  )
+
 async function sampleFlashColour(page: Page) {
   // The camera keeps re-scanning every ~1.2s, so a missed frame just retries.
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
-      await page.waitForFunction(
-        () => {
-          const el = document.querySelector('[aria-hidden]')
-          return !!el && parseFloat(getComputedStyle(el).opacity) > 0.95
-        },
-        { timeout: 4000, polling: 'raf' },
-      )
+      // Wait out whatever is already on screen before waiting for a fresh flash.
+      // Playwright fills the "Nové zboží" dialog faster than the amber unknown-code
+      // flash's 400ms life, so without this every sample lands inside that amber
+      // flash and the test concludes the screen never went green.
+      await waitFlash(page, 'off')
+      await waitFlash(page, 'on')
     } catch {
       continue
     }

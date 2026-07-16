@@ -143,7 +143,14 @@ export async function buildProtocolPdf(input: ProtocolInput): Promise<Blob> {
   autoTable(doc, {
     startY: y,
     head: [['#', 'Čárový kód', 'Název zboží', 'Počet']],
-    body: lines.map((l, i) => [String(i + 1), l.code, l.name, fmtNum(l.qty)]),
+    // Unlabelled goods carry a synthetic internal id. Printing it on a document
+    // someone signs would read as a real barcode and send them hunting for it.
+    body: lines.map((l, i) => [
+      String(i + 1),
+      l.noBarcode ? 'bez kódu' : l.code,
+      l.name,
+      fmtNum(l.qty),
+    ]),
     foot: [['', '', 'Celkem kusů', fmtNum(totalPieces)]],
     styles: { font: FONT_FAMILY, fontSize: 10, cellPadding: 2 },
     headStyles: { font: FONT_FAMILY, fontStyle: 'bold', fillColor: [15, 23, 42], textColor: 255 },

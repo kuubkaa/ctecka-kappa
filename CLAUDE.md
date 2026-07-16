@@ -100,6 +100,8 @@
 - Role neexistují — aplikace je jednouživatelská. Na role se neptej.
 
 ## Nuance projektu
+- **Zboží bez čárového kódu** (vážené, rozbalené, vlastní výroba) má syntetický interní kód s prefixem `bez-kodu:`. Všechno je klíčované na `code`, takže prázdný být nemůže — ale **nikdy ho nezobrazuj**. Vymyšlené ID na podepisovaném protokolu vypadá jako skutečný čárový kód a pošle člověka hledat ho do regálu. Používej `isNoBarcode()` / `Line.noBarcode`.
+- Volné zboží se slučuje **podle názvu** (bez ohledu na velikost písmen a mezery), ne podle kódu — dva řádky „Jablka" na jednom protokolu jsou vada.
 - **jsPDF tiše maže text.** Když font nemá nějaký znak, jsPDF buď znak zahodí, nebo **uřízne celý zbytek řetězce** — bez chyby. Naměřeno: `"Müsli tyčinka ořechová"` → `"M"`. Proto font pokrývá Latin-1 + Latin Extended-A a `renderable()` v `pdf.ts` propouští jen znaky z `charset.json`. Nikdy nevolej `doc.text()` s nefiltrovaným uživatelským vstupem.
 - **Bold font je povinný.** autoTable sází hlavičky tučně; bez registrovaného bold řezu jsPDF potichu spadne zpět na Helveticu a rozsype diakritiku jen v hlavičce.
 - **Skenování běží přes ponyfill na obou platformách**, i na Androidu, kde nativní API existuje. iOS BarcodeDetector nikdy nefungoval, Android vyžaduje Google Play Services. Jeden engine = jedno chování.

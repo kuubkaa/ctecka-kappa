@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
+  addWithoutBarcode,
   db,
   deleteSession,
   getLines,
@@ -31,7 +32,10 @@ export function SessionScreen() {
   const [editQty, setEditQty] = useState('')
   const [editName, setEditName] = useState('')
   const [manualOpen, setManualOpen] = useState(false)
+  const [manualMode, setManualMode] = useState<'code' | 'nocode'>('code')
   const [manualCode, setManualCode] = useState('')
+  const [looseName, setLooseName] = useState('')
+  const [looseQty, setLooseQty] = useState('1')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,12 +67,28 @@ export function SessionScreen() {
     setUnknownCode(null)
   }
 
+  function openManual(mode: 'code' | 'nocode') {
+    setManualMode(mode)
+    setManualCode('')
+    setLooseName('')
+    setLooseQty('1')
+    setManualOpen(true)
+  }
+
   async function addManual() {
     const code = manualCode.trim()
     if (!code) return
     setManualOpen(false)
     setManualCode('')
     await handleDetect(code)
+  }
+
+  async function addLoose() {
+    const name = looseName.trim()
+    const qty = Number(looseQty)
+    if (!name || !Number.isFinite(qty) || qty <= 0) return
+    setManualOpen(false)
+    await addWithoutBarcode(sessionId, name, qty)
   }
 
   function openEdit(line: Line) {
@@ -154,7 +174,11 @@ export function SessionScreen() {
                   className="min-w-0 flex-1 text-left active:opacity-60"
                 >
                   <p className="truncate font-medium">{line.name}</p>
-                  <p className="truncate font-mono text-xs text-slate-500">{line.code}</p>
+                  {line.noBarcode ? (
+                    <p className="truncate text-xs italic text-slate-400">bez čárového kódu</p>
+                  ) : (
+                    <p className="truncate font-mono text-xs text-slate-500">{line.code}</p>
+                  )}
                 </button>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
@@ -203,8 +227,11 @@ export function SessionScreen() {
       </main>
 
       <div className="sticky bottom-0 flex gap-3 bg-gradient-to-t from-slate-100 via-slate-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <Button variant="secondary" onClick={() => setManualOpen(true)}>
+        <Button variant="secondary" onClick={() => openManual('code')}>
           Ručně
+        </Button>
+        <Button variant="secondary" onClick={() => openManual('nocode')}>
+          Bez kódu
         </Button>
         {/* Camera opens straight from this tap — deferring it past the gesture is
             what makes iOS re-prompt and time out mid-count. primeAudio must ride the
@@ -298,24 +325,84 @@ export function SessionScreen() {
         </div>
       </Dialog>
 
-      <Dialog open={manualOpen} title="Zadat kód ručně" onClose={() => setManualOpen(false)}>
-        <Field
-          label="Čárový kód"
-          autoFocus
-          inputMode="numeric"
-          value={manualCode}
-          onChange={(e) => setManualCode(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && addManual()}
-          hint="Když je kód poškozený a nejde načíst."
-        />
-        <div className="mt-5 flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setManualOpen(false)}>
-            Zrušit
-          </Button>
-          <Button className="flex-1" onClick={addManual} disabled={!manualCode.trim()}>
-            Započítat
-          </Button>
+      <Dialog open={manualOpen} title="Přidat ručně" onClose={() => setManualOpen(false)}>
+        <div role="tablist" className="mb-5 flex gap-1 rounded-xl bg-slate-100 p-1">
+          {(
+            [
+              ['code', 'Podle kódu'],
+              ['nocode', 'Bez kódu'],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              role="tab"
+              aria-selected={manualMode === mode}
+              onClick={() => setManualMode(mode)}
+              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
+                manualMode === mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+
+        {manualMode === 'code' ? (
+          <>
+            <Field
+              label="Čárový kód"
+              autoFocus
+              inputMode="numeric"
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addManual()}
+              hint="Když je kód poškozený nebo ho čtečka nepřečte."
+            />
+            <div className="mt-5 flex gap-3">
+              <Button variant="secondary" className="flex-1" onClick={() => setManualOpen(false)}>
+                Zrušit
+              </Button>
+              <Button className="flex-1" onClick={addManual} disabled={!manualCode.trim()}>
+                Započítat
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-4">
+              <Field
+                label="Název zboží"
+                autoFocus
+                value={looseName}
+                placeholder="např. Jablka volně"
+                onChange={(e) => setLooseName(e.target.value)}
+                hint="Pro zboží, které čárový kód vůbec nemá — vážené, rozbalené, vlastní výroba."
+              />
+              <Field
+                label="Počet kusů"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={looseQty}
+                onChange={(e) => setLooseQty(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addLoose()}
+                hint="Zadej rovnou celý počet — nemusíš klikat po jednom."
+              />
+            </div>
+            <div className="mt-5 flex gap-3">
+              <Button variant="secondary" className="flex-1" onClick={() => setManualOpen(false)}>
+                Zrušit
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={addLoose}
+                disabled={!looseName.trim() || !(Number(looseQty) > 0)}
+              >
+                Přidat
+              </Button>
+            </div>
+          </>
+        )}
       </Dialog>
 
       <ConfirmDialog

@@ -79,7 +79,13 @@ export function SettingsScreen() {
                     }}
                     className="w-full rounded-lg bg-transparent px-1 py-0.5 font-medium outline-none focus:bg-slate-100"
                   />
-                  <p className="truncate px-1 font-mono text-xs text-slate-500">{product.code}</p>
+                  {product.noBarcode ? (
+                    <p className="truncate px-1 text-xs italic text-slate-400">
+                      bez čárového kódu
+                    </p>
+                  ) : (
+                    <p className="truncate px-1 font-mono text-xs text-slate-500">{product.code}</p>
+                  )}
                 </div>
                 <button
                   aria-label={`Zapomenout ${product.name}`}
