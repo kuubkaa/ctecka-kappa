@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <title>E2E scanner harness</title>
+  </head>
+  <body>
+    <!--
+      Test-only page. It is built through the exact same Vite pipeline as the app —
+      same wasm asset handling, same version lockstep — so decoding here proves the
+      production build works, not just the dev server.
+
+      It is added as a build input only when E2E=1, so it never ships to users.
+      See build.rollupOptions.input in vite.config.ts.
+    -->
+    <script type="module">
+      import { createDetector } from '../src/lib/scanner'
+
+      window.__detect = async (canvas) => {
+        const results = await createDetector().detect(canvas)
+        return results.map((r) => ({ value: r.rawValue, format: r.format }))
+      }
+      window.__harnessReady = true
+    </script>
+  </body>
+</html>

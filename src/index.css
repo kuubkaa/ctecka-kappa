@@ -1,0 +1,29 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-100 text-slate-900 antialiased;
+  /* A warehouse user drags the item list constantly; bouncing the whole page
+     under it makes the app feel broken. */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Number inputs with spinners are unusable with a thumb. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
