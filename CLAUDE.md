@@ -53,6 +53,9 @@
 ### Testy
 - E2E: Playwright, konfigurace `playwright.config.ts`, testy v `e2e/`
 - **Testy běží proti produkčnímu buildu**, ne dev serveru — wasm, líně načítaný PDF chunk a service worker existují až po buildu.
+- **Skenování se testuje přes falešnou kameru.** `e2e/y4m.ts` vygeneruje video s reálným EAN-13, Chromium ho podstrčí jako kameru. Testuje tak celou cestu: kamera → wasm dekódování → započítání → zpětná vazba.
+  - Nutné `channel: 'chromium'` — výchozí headless build Playwrightu (`chromium-headless-shell`) **nemá média vůbec** a `getUserMedia` v něm hlásí „Not supported".
+  - Cesta k .y4m musí být dekódovaná (`fileURLToPath`, ne `.pathname`) — repo je ve složce s diakritikou a Chromium při chybějícím souboru tiše nezaregistruje žádnou kameru, místo aby ohlásil chybu.
 - Po napsání nové funkce vždy spusť: `npm run test:e2e`
 - Před commitem ověř, že testy procházejí
 
@@ -101,6 +104,7 @@
 - **Bold font je povinný.** autoTable sází hlavičky tučně; bez registrovaného bold řezu jsPDF potichu spadne zpět na Helveticu a rozsype diakritiku jen v hlavičce.
 - **Skenování běží přes ponyfill na obou platformách**, i na Androidu, kde nativní API existuje. iOS BarcodeDetector nikdy nefungoval, Android vyžaduje Google Play Services. Jeden engine = jedno chování.
 - **iOS neuchová povolení k fotoaparátu** mezi studenými starty PWA — Apple to ví a neopravuje. `getUserMedia` proto vždy volej přímo z gesta uživatele, jinak dostaneš místo 10minutového okna jednominutové.
+- **Zvuk se musí „nastartovat" z gesta.** iOS spouští každý AudioContext uspaný a probudit ho smí jen dotek uživatele. Proto `primeAudio()` visí na tlačítku Skenovat; kdyby se AudioContext vytvářel až ve skenovací smyčce, pípání by na iPhonu tiše chybělo.
 - **iOS umí zčernat náhled kamery** po přepnutí z pozadí, přičemž stream se tváří jako živý. Řeší se znovupřipojením `srcObject` (viz `Scanner.tsx`).
 - `.wasm` dekodér a jeho JS obal jsou svázané verzí — nikdy nekopíruj wasm do `public/`, musí projít Vite `?url` importem.
 

@@ -7,38 +7,25 @@ import {
   stopCamera,
   torchAvailable,
 } from '../lib/scanner'
+import { releaseAudio, scanSuccess, scanUnknown } from '../lib/feedback'
 
 /** Ignore the same code for this long, so one barcode held in frame counts once. */
 const RESCAN_COOLDOWN_MS = 1200
 /** ~8 detections/sec. Faster drains battery without catching more barcodes. */
 const DETECT_INTERVAL_MS = 125
+/** Long enough to catch in peripheral vision, short enough not to block the next scan. */
+const FLASH_MS = 400
+
+export type ScanOutcomeKind = 'counted' | 'unknown'
 
 interface Props {
-  onDetect: (code: string) => void
+  /** Resolves with what happened, so the confirmation can match the outcome. */
+  onDetect: (code: string) => Promise<ScanOutcomeKind>
   onClose: () => void
   /** Rendered over the viewfinder — the running count, last item, etc. */
   status?: React.ReactNode
   /** Pauses detection while a dialog is open, without tearing the camera down. */
   paused?: boolean
-}
-
-function feedback() {
-  navigator.vibrate?.(60)
-  try {
-    const ctx = new AudioContext()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.frequency.value = 880
-    gain.gain.setValueAtTime(0.15, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12)
-    osc.start()
-    osc.stop(ctx.currentTime + 0.12)
-    osc.onended = () => void ctx.close()
-  } catch {
-    // Audio is a nicety; a blocked AudioContext must never stop the scan.
-  }
 }
 
 export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
@@ -52,6 +39,7 @@ export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
   const [ready, setReady] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [hasTorch, setHasTorch] = useState(false)
+  const [flash, setFlash] = useState<ScanOutcomeKind | null>(null)
 
   pausedRef.current = paused
   onDetectRef.current = onDetect
@@ -73,6 +61,7 @@ export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
+    let flashTimer: number | undefined
 
     async function start() {
       try {
@@ -106,8 +95,15 @@ export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
               const now = Date.now()
               if (code !== last.code || now - last.at > RESCAN_COOLDOWN_MS) {
                 lastHitRef.current = { code, at: now }
-                feedback()
-                onDetectRef.current(code)
+                const outcome = await onDetectRef.current(code)
+                if (cancelled) return
+                // Sound, vibration and a flash together: in a warehouse the user is
+                // looking at the barcode, not the screen, and may not hear a thing.
+                if (outcome === 'counted') scanSuccess()
+                else scanUnknown()
+                setFlash(outcome)
+                window.clearTimeout(flashTimer)
+                flashTimer = window.setTimeout(() => setFlash(null), FLASH_MS)
               }
             }
           } catch {
@@ -129,9 +125,11 @@ export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      window.clearTimeout(flashTimer)
       document.removeEventListener('visibilitychange', reattach)
       stopCamera(streamRef.current)
       streamRef.current = null
+      releaseAudio()
     }
   }, [reattach])
 
@@ -164,6 +162,9 @@ export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
     )
   }
 
+  const frameColor =
+    flash === 'counted' ? 'border-emerald-400' : flash === 'unknown' ? 'border-amber-400' : 'border-white/80'
+
   return (
     <div className="fixed inset-0 z-50 bg-black">
       <video
@@ -174,9 +175,22 @@ export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
         autoPlay
       />
 
-      {/* Viewfinder */}
+      {/* Whole-screen wash: catchable out of the corner of the eye while aiming. */}
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 transition-opacity duration-150 ${
+          flash === 'counted'
+            ? 'bg-emerald-400/40 opacity-100'
+            : flash === 'unknown'
+              ? 'bg-amber-400/40 opacity-100'
+              : 'opacity-0'
+        }`}
+      />
+
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-40 w-[85%] max-w-sm rounded-2xl border-2 border-white/80 shadow-[0_0_0_100vmax_rgba(0,0,0,0.45)]" />
+        <div
+          className={`h-40 w-[85%] max-w-sm rounded-2xl border-4 shadow-[0_0_0_100vmax_rgba(0,0,0,0.45)] transition-colors duration-150 ${frameColor}`}
+        />
       </div>
 
       {!ready && (

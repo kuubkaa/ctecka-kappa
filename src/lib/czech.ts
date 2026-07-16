@@ -23,8 +23,11 @@ function form(n: number, forms: Forms): string {
   return forms.other
 }
 
-export const pieces = (n: number) =>
-  `${n.toLocaleString('cs-CZ')} ${form(n, { one: 'kus', few: 'kusy', other: 'kusů' })}`
+const PIECE: Forms = { one: 'kus', few: 'kusy', other: 'kusů' }
+const ENTRY: Forms = { one: 'položka', few: 'položky', other: 'položek' }
 
-export const entries = (n: number) =>
-  `${n.toLocaleString('cs-CZ')} ${form(n, { one: 'položka', few: 'položky', other: 'položek' })}`
+/** Just the noun, correctly declined — for when the number is displayed separately. */
+export const pieceWord = (n: number) => form(n, PIECE)
+
+export const pieces = (n: number) => `${n.toLocaleString('cs-CZ')} ${form(n, PIECE)}`
+export const entries = (n: number) => `${n.toLocaleString('cs-CZ')} ${form(n, ENTRY)}`

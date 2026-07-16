@@ -12,8 +12,9 @@ import {
   setQty,
   type Line,
 } from '../db'
-import { entries, pieces } from '../lib/czech'
-import { Scanner } from '../components/Scanner'
+import { entries, pieceWord, pieces } from '../lib/czech'
+import { primeAudio } from '../lib/feedback'
+import { Scanner, type ScanOutcomeKind } from '../components/Scanner'
 import { Button, ConfirmDialog, Dialog, EmptyState, Field } from '../components/ui'
 
 export function SessionScreen() {
@@ -24,7 +25,8 @@ export function SessionScreen() {
   const [scanning, setScanning] = useState(false)
   const [unknownCode, setUnknownCode] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
-  const [lastScan, setLastScan] = useState<{ name: string; qty: number } | null>(null)
+  // `seq` re-keys the confirmation card so its pop animation replays on every scan.
+  const [lastScan, setLastScan] = useState<{ name: string; qty: number; seq: number } | null>(null)
   const [editing, setEditing] = useState<Line | null>(null)
   const [editQty, setEditQty] = useState('')
   const [editName, setEditName] = useState('')
@@ -40,14 +42,15 @@ export function SessionScreen() {
   const totalPieces = lines.reduce((sum, l) => sum + l.qty, 0)
 
   const handleDetect = useCallback(
-    async (code: string) => {
+    async (code: string): Promise<ScanOutcomeKind> => {
       const outcome = await recordScan(sessionId, code)
       if (outcome.kind === 'unknown') {
         setNewName('')
         setUnknownCode(code) // Pauses the scanner until the user names it.
-      } else {
-        setLastScan({ name: outcome.product.name, qty: outcome.qty })
+        return 'unknown'
       }
+      setLastScan({ name: outcome.product.name, qty: outcome.qty, seq: Date.now() })
+      return 'counted'
     },
     [sessionId],
   )
@@ -56,7 +59,7 @@ export function SessionScreen() {
     const code = unknownCode
     if (!code || !newName.trim()) return
     await nameAndCount(sessionId, code, newName)
-    setLastScan({ name: newName.trim(), qty: 1 })
+    setLastScan({ name: newName.trim(), qty: 1, seq: Date.now() })
     setUnknownCode(null)
   }
 
@@ -204,8 +207,16 @@ export function SessionScreen() {
           Ručně
         </Button>
         {/* Camera opens straight from this tap — deferring it past the gesture is
-            what makes iOS re-prompt and time out mid-count. */}
-        <Button className="flex-1 text-lg" onClick={() => setScanning(true)}>
+            what makes iOS re-prompt and time out mid-count. primeAudio must ride the
+            same tap: iOS only lets a gesture start an AudioContext, and creating one
+            later in the detect loop leaves the confirmation beep silently missing. */}
+        <Button
+          className="flex-1 text-lg"
+          onClick={() => {
+            primeAudio()
+            setScanning(true)
+          }}
+        >
           Skenovat
         </Button>
       </div>
@@ -220,11 +231,19 @@ export function SessionScreen() {
           }}
           status={
             lastScan && (
-              <div className="rounded-2xl bg-white/95 p-4 text-center shadow-lg backdrop-blur">
-                <p className="truncate font-semibold">{lastScan.name}</p>
-                <p className="text-sm text-slate-600">
-                  napočítáno: <span className="font-semibold">{lastScan.qty}</span>
+              <div
+                // Re-keying on every scan restarts the animation, so a repeat scan of
+                // the same item reads as a new event rather than a silent increment.
+                key={lastScan.seq}
+                className="animate-scan-pop rounded-2xl bg-white p-4 text-center shadow-2xl"
+                role="status"
+                aria-live="polite"
+              >
+                <p className="truncate text-lg font-semibold">{lastScan.name}</p>
+                <p className="mt-1 text-5xl font-bold tabular-nums text-emerald-600">
+                  {lastScan.qty}
                 </p>
+                <p className="text-sm text-slate-500">{pieceWord(lastScan.qty)} celkem</p>
               </div>
             )
           }
