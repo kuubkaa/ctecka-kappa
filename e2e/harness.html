@@ -16,6 +16,7 @@
     <script type="module">
       import { createDetector } from '../src/lib/scanner'
       import * as db from '../src/db'
+      import * as sync from '../src/lib/sync'
 
       window.__detect = async (canvas) => {
         const results = await createDetector().detect(canvas)
@@ -25,6 +26,7 @@
       // Lets tests drive db.ts directly — the concurrency the counter fix exists for
       // is not reachable by clicking, because the UI awaits each action in turn.
       window.__db = db
+      window.__sync = sync
 
       /**
        * Signs in as an arbitrary identity using a token minted from the management
@@ -37,6 +39,12 @@
         await db.db.cloud.login({ email: token.claims.sub })
         return db.db.cloud.currentUserId
       }
+
+      // The same guard the app would use, driven by the one sign-in a machine can
+      // perform. This reproduces the data loss, so it's the honest thing to test
+      // the guard against.
+      window.__testSignInGuarded = async (token) =>
+        sync.signInPreservingData(() => window.__testSignIn(token))
 
       window.__harnessReady = true
     </script>

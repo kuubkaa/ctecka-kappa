@@ -101,6 +101,11 @@
 - Role neexistují — aplikace je jednouživatelská. Na role se neptej.
 
 ## Nuance projektu
+- 🔴 **PŘIHLÁŠENÍ MAŽE LOKÁLNÍ DATA — proto je vypnuté.** Naměřeno proti reálné DB: napočítej inventuru bez přihlášení, přihlas se → za ~2 s je pryč (0 inventur, 0 položek), bez chyby. Řádky zapsané odhlášeným patří uživateli `unauthorized`; přihlášením se změní totožnost a server takové řádky nezná.
+  - **Mazání NENÍ součástí přihlašovacího syncu.** `syncState.phase` je `in-sync` ve chvíli, kdy data ještě existují — smazání přijde až potom. Proto pojistka „počkej na dosynchronizování a zkontroluj" **prokazatelně nefunguje** (`signInPreservingData` v `lib/sync.ts` — nechána jako výchozí bod, ne k použití).
+  - **Směr opravy:** po přihlášení odsouzené řádky sám smaž a znovu naimportuj zálohu jako přihlášený uživatel. Musí to přežít pád stránky uprostřed (kopie nesmí být jen v paměti).
+  - **Nevyřešeno:** jestli to dělá addon, nebo můj testovací postroj (překonfigurovává `db.cloud` po otevření — appka to nikdy nedělá). Skutečnou přihlašovací cestu nešlo otestovat: OTP i demo grant čekají na interakci v okně.
+  - Hlídá to `e2e/sync-safety.spec.ts` — smaž ty testy jedině spolu s testem, který dokáže, že data přihlášení přežijí.
 - **Synchronizace je dobrovolná a viditelná.** `requireAuth: false` — appka nikdy nesmí chtít přihlášení, používá se ve skladu bez signálu. Přihlášení zapíná sync a je v Nastavení. Stav syncu je **vždy vidět** (`useSync`) — uživatel výslovně žádal, aby se nic nevyplo potichu.
 - **`nameSuffix: false` je povinné.** Dexie Cloud jinak připojí ID databáze k názvu (`ctecka-kappa-sync-zuszhwp9s`). Verze bez přípony už je nasazená na reálných zařízeních — přejmenování by tam trvale uvěznilo data a appka by vypadala prázdná, ne rozbitá.
 - **`disableEagerSync: true` + časovač po 10 s.** Free tarif dovolí 50 synchronizací / 5 min na uživatele; sync po každé změně by při 30 skenech za minutu udělal ~150.
