@@ -20,6 +20,7 @@
 - Framework: Vite 8 + React 19 + TypeScript 6 (statická SPA, žádný server)
 - UI: Tailwind CSS v4, vlastní komponenty (`src/components/ui.tsx`), font Roboto
 - Databáze: IndexedDB v zařízení (Dexie 4). **Žádná synchronizace** — přenos dat mezi zařízeními jde přes zálohu (JSON).
+- Katalog zboží: volitelně z Google tabulky (`src/lib/catalog.ts`) — gviz CSV endpoint, **jen čtení, jen dovnitř**
 - Auth: **žádná**
 - Skenování: `barcode-detector` (ponyfill nad zxing-wasm)
 - PDF: jsPDF 4 + jspdf-autotable 5 + vestavěný ořezaný Roboto
@@ -92,6 +93,7 @@
     ├── components/           # Scanner (kamera) + ui.tsx (tlačítka, dialogy)
     ├── lib/
     │   ├── scanner.ts        # Kamera, torch, wasm dekodér
+    │   ├── catalog.ts        # Načtení zboží z Google tabulky
     │   ├── pdf.ts            # Předávací protokol
     │   └── charset.json      # Generovaný — needituj ručně
     └── screens/              # HomeScreen, SessionScreen, SettingsScreen
@@ -112,6 +114,12 @@
 - **Počty NIKDY neupravuj stylem „přečti a zapiš".** Používej `add(delta)` z Dexie (`recordScan`, `nameAndCount`, `addWithoutBarcode`, `bumpQty`). Serializuje se jako pokyn `{"@@propmod":{"add":1}}`, ne jako hotová hodnota, a server ho vyhodnotí proti aktuálnímu stavu. Bez toho: telefon offline napočítá 50, PC zároveň nastaví 3 → výsledek 50 nebo 3, nikdy 53. Tiše a na podepisovaném protokolu.
   - `setQty` je schválně absolutní — uživatel říká „na regálu jich je 48", to musí přebít starší počet.
   - ⚠️ **Testy tohle neověří** (ověřeno mutací: read-modify-write je nechá zelené). Na jednom zařízení transakce rozdíl schová. Skutečné ověření přijde až se synchronizací.
+- **Katalog z Google tabulky je jednosměrný a je to jeho hlavní vlastnost.** Z tabulky se čtou jen kódy a názvy; ven neodejde nic. Proto neodporuje rozhodnutí nesynchronizovat — na protokolu jsou jména lidí, v seznamu zboží ne. Tabulka musí být „Kdokoli s odkazem → Čtenář" (viz `security_warnings.md`).
+  - **CORS ověřen měřením, ne dohadem:** gviz endpoint (`/gviz/tq?tqx=out:csv`) vrací 200, `text/csv` a `access-control-allow-origin` s naším originem. Ověřeno i skutečným `fetch()` z prohlížeče, ne jen curlem (curl CORS nevynucuje). Žádný server ani API klíč netřeba.
+  - ⚠️ **Google tiše podstrčí první list.** Neznámý `gid` i neznámý název listu = HTTP 200 a data **prvního listu**. Překlep tedy nejde odhalit dotazem — vypadá jako úspěch. Proto se `gid` bere jen z vloženého odkazu (nikdy se nepíše ručně) a proto je **náhled před zápisem povinný**: jméno zboží pozná uživatel, čárový kód ne.
+  - ⚠️ **Sheets ničí kódy formátem buňky.** Číselný sloupec udělá z EAN `8,59400E+12` a ukousne nuly na začátku. Scientific notation `catalog.ts` detekuje a **odmítne celou tabulku** s návodem (Formát → Číslo → Prostý text) — půlka katalogu s tichými překlepy v kódech je horší než nic.
+  - Odkaz z „Publikovat na webu" (`/d/e/2PACX…/pub`) je jiná adresa a gviz na ní nefunguje; `csvUrlFor()` ji pozná a pošle uživatele na Sdílet → Kopírovat odkaz.
+  - Import **přidává a opravuje, nikdy nemaže**. Zboží, které v tabulce není, zůstane — katalog se staví i ručně při skenování a tabulka o těch řádcích neví. Počty se nedotkne (transakce otevírá jen `products`).
 - **Zboží bez čárového kódu** (vážené, rozbalené, vlastní výroba) má syntetický interní kód s prefixem `bez-kodu:`. Všechno je klíčované na `code`, takže prázdný být nemůže — ale **nikdy ho nezobrazuj**. Vymyšlené ID na podepisovaném protokolu vypadá jako skutečný čárový kód a pošle člověka hledat ho do regálu. Používej `isNoBarcode()` / `Line.noBarcode`.
 - Volné zboží se slučuje **podle názvu** (bez ohledu na velikost písmen a mezery), ne podle kódu — dva řádky „Jablka" na jednom protokolu jsou vada.
 - **jsPDF tiše maže text.** Když font nemá nějaký znak, jsPDF buď znak zahodí, nebo **uřízne celý zbytek řetězce** — bez chyby. Naměřeno: `"Müsli tyčinka ořechová"` → `"M"`. Proto font pokrývá Latin-1 + Latin Extended-A a `renderable()` v `pdf.ts` propouští jen znaky z `charset.json`. Nikdy nevolej `doc.text()` s nefiltrovaným uživatelským vstupem.
@@ -125,7 +133,8 @@
 ## Rozhodnutí
 - **PWA místo nativní Android aplikace** — uživatel chce Android i iOS, appka nepotřebuje nic, co web neumí, a nasazení změny je otázka minut místo instalace do telefonu.
 - **Data jen v telefonu, žádný server** — ve skladu není signál, víc lidí najednou nepočítá, a server by znamenal přihlašování a provozní náklady bez užitku.
-- **Katalog se buduje ručně za běhu** — uživatel nemá seznam EAN → název. Neznámý kód vyvolá dotaz na název a ten se zapamatuje napříč inventurami.
+- **Katalog se buduje ručně za běhu** — uživatel nemá seznam EAN → název. Neznámý kód vyvolá dotaz na název a ten se zapamatuje napříč inventurami. Kdo seznam má, může ho předvyplnit z Google tabulky (níže) — ruční cesta zůstává, ne náhrada.
+- **Katalog z tabulky přes odkaz, ne přes stažené CSV** — vybráno uživatelem. Odkaz se vloží jednou a pak stačí tlačítko; CSV by znamenalo stahovat soubor při každé změně. Cena: tabulka musí být veřejně čitelná odkazem a načtení potřebuje signál (ve skladu ne — načítá se předem).
 - **Bez ESLintu** — typecheck v buildu zatím stačí. typescript-eslint navíc neumí TS 7, proto je TypeScript zamčený na 6.0.3.
 
 ## Údržba tohoto souboru

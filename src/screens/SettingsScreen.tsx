@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, getSettings, markBackedUp, renameProduct, saveSettings } from '../db'
+import { db, getSettings, importCatalog, markBackedUp, renameProduct, saveSettings } from '../db'
 import {
   BackupError,
   backupFileName,
@@ -10,6 +10,7 @@ import {
   parseBackup,
   type Backup,
 } from '../lib/backup'
+import { CatalogError, fetchCatalog, type CatalogPreview } from '../lib/catalog'
 import { downloadBlob } from '../lib/download'
 import { entries, kinds, stocktakes } from '../lib/czech'
 import { Button, ConfirmDialog, Dialog, EmptyState, Field } from '../components/ui'
@@ -23,13 +24,61 @@ export function SettingsScreen() {
   const [pending, setPending] = useState<Backup | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [catalogUrl, setCatalogUrl] = useState('')
+  const [catalogLoadedAt, setCatalogLoadedAt] = useState<number | undefined>()
+  const [catalogPreview, setCatalogPreview] = useState<CatalogPreview | null>(null)
+  const [catalogBusy, setCatalogBusy] = useState(false)
+  const [catalogNotice, setCatalogNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(
+    null,
+  )
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), [])
   useEffect(() => {
     void getSettings().then((s) => {
       setCompany(s.company)
       setDefaultPlace(s.defaultPlace)
+      setCatalogUrl(s.catalogUrl ?? '')
+      setCatalogLoadedAt(s.catalogLoadedAt)
     })
   }, [])
+
+  /** Fetch and show — never import straight from the button. See the dialog below. */
+  async function loadCatalog() {
+    setCatalogBusy(true)
+    setCatalogNotice(null)
+    try {
+      setCatalogPreview(await fetchCatalog(catalogUrl))
+    } catch (err) {
+      setCatalogNotice({
+        kind: 'err',
+        text: err instanceof CatalogError ? err.message : 'Tabulku se nepodařilo přečíst.',
+      })
+    } finally {
+      setCatalogBusy(false)
+    }
+  }
+
+  async function doImportCatalog() {
+    if (!catalogPreview) return
+    const { rows } = catalogPreview
+    setCatalogPreview(null)
+    setCatalogBusy(true)
+    try {
+      const res = await importCatalog(rows)
+      const at = Date.now()
+      await saveSettings({ catalogLoadedAt: at })
+      setCatalogLoadedAt(at)
+      setCatalogNotice({
+        kind: 'ok',
+        text: res.added || res.renamed
+          ? `Načteno: ${kinds(res.added)} nového zboží, ${res.renamed} přejmenovaného.`
+          : 'Hotovo — v tabulce nebylo nic nového.',
+      })
+    } catch {
+      setCatalogNotice({ kind: 'err', text: 'Zboží se nepodařilo uložit. Data zůstala beze změny.' })
+    } finally {
+      setCatalogBusy(false)
+    }
+  }
 
   async function persist(patch: { company?: string; defaultPlace?: string }) {
     await saveSettings(patch)
@@ -158,15 +207,69 @@ export function SettingsScreen() {
         )}
       </section>
 
+      <section className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
+        <h2 className="font-semibold">Zboží z tabulky</h2>
+        <p className="mt-1 mb-4 text-sm text-slate-500">
+          Když si zboží vypíšeš do Google tabulky, aplikace se při skenování nebude ptát na
+          názvy. <strong>První sloupec čárový kód, druhý název.</strong> Čte se první list.
+        </p>
+        <Field
+          label="Odkaz na tabulku"
+          type="url"
+          inputMode="url"
+          placeholder="https://docs.google.com/spreadsheets/…"
+          value={catalogUrl}
+          onChange={(e) => setCatalogUrl(e.target.value)}
+          // Saved on blur rather than on a successful load: the link is tedious to paste
+          // on a phone, and losing it because the signal dropped mid-fetch would be a
+          // pointless retype. A wrong link stored is just a text field to correct.
+          onBlur={() => void saveSettings({ catalogUrl: catalogUrl.trim() })}
+          hint="V tabulce dej Sdílet → Kdokoli s odkazem → Čtenář, pak Kopírovat odkaz."
+        />
+        <Button
+          variant="secondary"
+          className="mt-4 w-full"
+          onClick={loadCatalog}
+          disabled={catalogBusy || !catalogUrl.trim()}
+        >
+          {catalogBusy ? 'Načítám…' : 'Načíst zboží z tabulky'}
+        </Button>
+        {/* Stale-vs-fresh is the whole question when there's no sync: the sheet may have
+            moved on since this phone last looked, and only the user knows if that matters. */}
+        {catalogLoadedAt && (
+          <p className="mt-3 text-xs text-slate-500">
+            Naposledy načteno {new Date(catalogLoadedAt).toLocaleString('cs-CZ')}. Načti znovu,
+            když tabulku změníš — samo se to neaktualizuje.
+          </p>
+        )}
+        <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+          Stahuje se jen jedním směrem. Z telefonu do tabulky neodejde nic — ani inventury, ani
+          jména z protokolu. Potřebuje internet, takže si zboží načti dřív, než vyrazíš do skladu.
+        </p>
+        {catalogNotice && (
+          <p
+            role="status"
+            className={`mt-3 rounded-xl p-3 text-sm ${
+              catalogNotice.kind === 'ok'
+                ? 'bg-emerald-50 text-emerald-800'
+                : 'bg-red-50 text-red-700'
+            }`}
+          >
+            {catalogNotice.text}
+          </p>
+        )}
+      </section>
+
       <section className="mt-6">
         <h2 className="mb-1 font-semibold">Naučené zboží</h2>
         <p className="mb-4 text-sm text-slate-500">
-          Kódy, které jsi pojmenoval. Platí napříč všemi inventurami.
+          Kódy, které jsi pojmenoval nebo načetl z tabulky. Platí napříč všemi inventurami.
         </p>
 
         {products?.length === 0 ? (
           <EmptyState title="Zatím nic naučeného">
-            Až naskenuješ neznámý kód, aplikace se zeptá na název a uloží ho sem.
+            Načti zboží z tabulky, nebo naskenuj neznámý kód — aplikace se zeptá na název a
+            uloží ho sem.
           </EmptyState>
         ) : (
           <ul className="space-y-2">
@@ -226,6 +329,54 @@ export function SettingsScreen() {
             Zrušit
           </Button>
           <Button className="flex-1" onClick={doImport}>
+            Načíst
+          </Button>
+        </div>
+      </Dialog>
+
+      {/*
+        The preview is not a formality — it is the only thing standing between the user
+        and silently wrong data. Google answers an unrecognised gid or sheet name by
+        serving the *first* tab with HTTP 200, so "wrong tab" and "columns the other way
+        round" both arrive looking exactly like success. Nobody can check a barcode, but
+        everybody spots that the list says Alexandra instead of Jablka.
+      */}
+      <Dialog
+        open={catalogPreview !== null}
+        title="Sedí to?"
+        onClose={() => setCatalogPreview(null)}
+      >
+        <p className="mb-3 text-slate-600">
+          Z tabulky jsem přečetl {kinds(catalogPreview?.rows.length ?? 0)} zboží. Zkontroluj,
+          že je to opravdu ono:
+        </p>
+        <ul className="mb-4 divide-y divide-slate-100 rounded-xl bg-slate-50 p-3 text-sm">
+          {catalogPreview?.rows.slice(0, 5).map((row) => (
+            <li key={row.code} className="py-1.5 first:pt-0 last:pb-0">
+              <span className="font-medium text-slate-800">{row.name}</span>
+              <span className="ml-2 font-mono text-xs text-slate-500">{row.code}</span>
+            </li>
+          ))}
+          {(catalogPreview?.rows.length ?? 0) > 5 && (
+            <li className="py-1.5 text-slate-500">
+              …a další {(catalogPreview?.rows.length ?? 0) - 5}
+            </li>
+          )}
+        </ul>
+        {!!catalogPreview?.skipped && (
+          <p className="mb-4 text-sm text-amber-700">
+            {entries(catalogPreview.skipped)} jsem přeskočil — chyběl kód nebo název.
+          </p>
+        )}
+        <p className="mb-5 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+          Nic se nesmaže a napočítané kusy zůstanou. Zboží se <strong>přidá</strong>, a kde
+          tabulka říká jiný název než aplikace, přepíše ho tabulka.
+        </p>
+        <div className="flex gap-3">
+          <Button variant="secondary" className="flex-1" onClick={() => setCatalogPreview(null)}>
+            Zrušit
+          </Button>
+          <Button className="flex-1" onClick={doImportCatalog}>
             Načíst
           </Button>
         </div>
