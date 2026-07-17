@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { encode } from 'uqr'
 import { encodeEan13, withCheckDigit } from './ean13'
 import { qrPngDataUrl } from './qr'
 
@@ -81,4 +82,47 @@ test('the engine reads an internal article code from a QR, case intact', async (
   }, png)
 
   expect(decoded).toEqual([{ value: code, format: 'qr_code' }])
+})
+
+/**
+ * The labels we print must be readable by the scanner we ship — the two halves of the
+ * loop, and nothing else checks that they meet.
+ *
+ * The encoder (uqr) is not the decoder (zxing), so this is a real interoperability
+ * test rather than a library agreeing with itself. Every shape of code the app can hold
+ * is covered, including the synthetic id of loose goods: that one never appears in
+ * print, so a QR is the only way those goods are ever scannable.
+ *
+ * labels.spec.ts pins the other half — that the PDF contains exactly this matrix.
+ */
+test('QR codes we generate for labels are read by the scanner we ship', async ({ page }) => {
+  const codes = [
+    '311283-194-M', // internal article code
+    '309244', // …which may be just the type, with no colour or size
+    '8594001020304', // a plain EAN, for shelf labels
+    'bez-kodu:0f8b1c2e-1111-4222-8333-444455556666', // loose goods
+  ]
+
+  await page.goto('./e2e/harness.html')
+  await page.waitForFunction(() => (window as any).__harnessReady === true)
+
+  for (const code of codes) {
+    const { size, data } = encode(code, { border: 4, ecc: 'M' })
+    const decoded = await page.evaluate(
+      ({ size, data, scale }) => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = size * scale
+        const ctx = canvas.getContext('2d')!
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.fillStyle = '#000'
+        for (let y = 0; y < size; y++)
+          for (let x = 0; x < size; x++)
+            if (data[y]![x]) ctx.fillRect(x * scale, y * scale, scale, scale)
+        return (window as any).__detect(canvas)
+      },
+      { size, data, scale: 8 },
+    )
+    expect(decoded, `QR pro ${code}`).toEqual([{ value: code, format: 'qr_code' }])
+  }
 })

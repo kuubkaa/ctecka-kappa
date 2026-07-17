@@ -84,6 +84,8 @@
 ├── e2e/                      # Playwright testy
 │   ├── ean13.ts              # Generátor čárových kódů pro test skeneru
 │   ├── qr.ts                 # Generátor QR (zxing writer, jen v Node)
+│   ├── pdf-text.ts           # Čte text z PDF
+│   ├── pdf-qr.ts             # Rekonstruuje QR z kreslicích operací PDF
 │   └── harness.html          # Testovací stránka, přibalí se jen při E2E=1
 ├── public/fonts/             # Ořezaný Roboto pro PDF (generovaný, commitnutý)
 ├── scripts/
@@ -95,9 +97,12 @@
     ├── lib/
     │   ├── scanner.ts        # Kamera, torch, wasm dekodér
     │   ├── catalog.ts        # Načtení zboží z Google tabulky
+    │   ├── pdf-font.ts       # Sdílený font + renderable() — základ všech PDF
     │   ├── pdf.ts            # Předávací protokol
+    │   ├── labels.ts         # Archy štítků s QR (PDF)
+    │   ├── labels-layout.ts  # Mřížka archu — schválně bez jsPDF
     │   └── charset.json      # Generovaný — needituj ručně
-    └── screens/              # HomeScreen, SessionScreen, SettingsScreen
+    └── screens/              # HomeScreen, SessionScreen, SettingsScreen, LabelsScreen
 ```
 
 ## Omezení agenta
@@ -125,6 +130,11 @@
   - **Na velikosti písmen kódu nezáleží** (`codeKey`). Dokud byly kódy EANy, byly to číslice a nepřišlo to na přetřes; interní kód se ale přepisuje ručně, když se QR poškodí, a `-m` místo `-M` by otevřelo druhý řádek pro totéž zboží. Uloží se v té velikosti, jak přišel (je to primární klíč a `items` je na něm klíčované) — porovnává se jen `codeKey`. Platí i pro import z tabulky, jinak by tabulka vyrobila dvojče k ručně naučenému kódu.
   - Ruční pole má `inputMode="text"`, ne `numeric`: numerická klávesnice **nemá písmena**, takže `311283-194-M` do ní nešlo napsat — zrovna na obrazovce, která existuje pro případ, že štítek nejde načíst. Autocorrect a velká písmena jsou vypnuté; telefon „opravující" kód zboží nikdy nepomáhá.
   - Hlavička sloupce v protokolu je **„Kód zboží", ne „Čárový kód"** — QR není čárový kód a to slovo musí sedět na každý řádek pod ním.
+- **Štítky s QR** (`/stitky`, `lib/labels.ts`) — arch A4, 4×7 = 28 štítků, ke každému zboží v katalogu jeden: QR + kód + název. Generuje se **v telefonu**, žádná QR služba kódy nevidí, funguje offline.
+  - QR se kreslí **vektorově** (obdélníky), ne jako obrázek — rozmazaný QR je QR, který se nenaskenuje. Vodorovné běhy modulů se slučují do jednoho obdélníku; jeden obdélník na modul dělá z PDF několik MB a to se na telefonu nemusí otevřít.
+  - `border: 4` je povinná klidová zóna kolem QR. Bez ní skener symbol vůbec nenajde.
+  - U zboží bez čárového kódu se **netiskne kód, jen název** — je to syntetické id, viz pravidlo níž. QR ho ale nese, takže volné zboží je díky štítku poprvé skenovatelné.
+  - ⚠️ **Testy „vypadá to jako QR" nestačí.** Zrcadlený, posunutý nebo špatně škálovaný QR vypadá na papíře úplně normálně a jen se nenaskenuje. Proto `e2e/pdf-qr.ts` čte QR zpátky z kreslicích operací PDF a porovnává ho **modul po modulu** s výstupem enkodéru (ověřeno dvěma mutacemi: inverze i o modul širší běh test shodí). Druhá půlka smyčky je v `scanner.spec.ts` — že matici z uqr přečte náš zxing. Teprve obojí dohromady znamená „vytištěný štítek jde naskenovat".
 - ⚠️ **V `db.ts` byl syrový NUL bajt** (v `itemKey`, jako oddělovač) a kvůli němu git i grep považovaly **celý soubor za binární**: `git diff` mlčky hlásil `0 insertions, 0 deletions` a grep tiše nevracel shody. Napsané jako ` ` je to pro JS totožné a pro nástroje text. `.gitattributes` (`*.ts diff`) to navíc pojistí, kdyby se NUL objevil znovu. Kdyby ti grep na nějakém souboru nesmyslně mlčel, hledej tohle — a radši si soubor přečti.
 - **Zboží bez čárového kódu** (vážené, rozbalené, vlastní výroba) má syntetický interní kód s prefixem `bez-kodu:`. Všechno je klíčované na `code`, takže prázdný být nemůže — ale **nikdy ho nezobrazuj**. Vymyšlené ID na podepisovaném protokolu vypadá jako skutečný čárový kód a pošle člověka hledat ho do regálu. Používej `isNoBarcode()` / `Line.noBarcode`.
 - Volné zboží se slučuje **podle názvu** (bez ohledu na velikost písmen a mezery), ne podle kódu — dva řádky „Jablka" na jednom protokolu jsou vada.
@@ -141,6 +151,9 @@
 - **Data jen v telefonu, žádný server** — ve skladu není signál, víc lidí najednou nepočítá, a server by znamenal přihlašování a provozní náklady bez užitku.
 - **Katalog se buduje ručně za běhu** — uživatel nemá seznam EAN → název. Neznámý kód vyvolá dotaz na název a ten se zapamatuje napříč inventurami. Kdo seznam má, může ho předvyplnit z Google tabulky (níže) — ruční cesta zůstává, ne náhrada.
 - **Katalog z tabulky přes odkaz, ne přes stažené CSV** — vybráno uživatelem. Odkaz se vloží jednou a pak stačí tlačítko; CSV by znamenalo stahovat soubor při každé změně. Cena: tabulka musí být veřejně čitelná odkazem a načtení potřebuje signál (ve skladu ne — načítá se předem).
+- **Štítky jsou samostatná funkce, ne příloha protokolu** (přání uživatele). Protokol je záznam jedné inventury, který se podepisuje; štítky jsou dílenská práce, co se dělá jednou dopředu. Spojit je = tisknout štítky, kdykoli chceš protokol.
+- **QR generuje `uqr`, ne zxing writer** — zxing umí i zapisovat, ale je to **druhý ~1MB wasm** vedle čtecího a service worker ho precachuje uživateli do telefonu. `uqr` je 0 závislostí a vrací rovnou matici. Zjištěno cestou: **`@paulmillr/qr` je deprecated** a **`chart.googleapis.com` (co radí většina návodů) je mrtvý, vrací 404** — na QR generátor v tabulce použij QuickChart.
+- **Font a `renderable()` jsou v `pdf-font.ts`, ne v `pdf.ts`** — druhé PDF (štítky) by si jinak snadno založilo vlastní registraci fontu a jsPDF mlčky zahazuje text, který font neumí. Jedna kopie = nedá se zapomenout.
 - **Bez ESLintu** — typecheck v buildu zatím stačí. typescript-eslint navíc neumí TS 7, proto je TypeScript zamčený na 6.0.3.
 
 ## Údržba tohoto souboru

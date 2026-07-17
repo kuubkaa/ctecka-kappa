@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes } from 'react-router-dom'
 import { BackupReminder } from './components/BackupReminder'
 import { HomeScreen } from './screens/HomeScreen'
+import { LabelsScreen } from './screens/LabelsScreen'
 import { SessionScreen } from './screens/SessionScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 
@@ -13,6 +14,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<HomeScreen />} />
         <Route path="/inventura/:id" element={<SessionScreen />} />
+        <Route path="/stitky" element={<LabelsScreen />} />
         <Route path="/nastaveni" element={<SettingsScreen />} />
       </Routes>
       {/* Outside the routes: the backup is the only copy that survives a lost phone,

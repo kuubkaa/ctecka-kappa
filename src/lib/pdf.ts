@@ -1,71 +1,10 @@
-import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import charset from './charset.json'
+import { FONT_FAMILY, createPdfDoc, renderable } from './pdf-font'
 import type { Line, Session, Settings } from '../db'
 
-const FONT_FAMILY = 'Roboto'
-const FACES = [
-  { file: 'Roboto-cs-regular.ttf', style: 'normal' },
-  { file: 'Roboto-cs-bold.ttf', style: 'bold' },
-] as const
-
-/** Every character the embedded font can draw — generated alongside the fonts. */
-const RENDERABLE = new Set([...charset.chars])
-const REPLACEMENT = '?'
-
-/**
- * Screens text against the font before it reaches jsPDF.
- *
- * jsPDF's response to a character its font lacks is silent data loss, and it takes
- * two different forms (both measured against our own subset):
- *   "Müsli tyčinka ořechová" -> "M"              — truncates the rest of the string
- *   "Slovenská ľalia ôsma"   -> "Slovenská alia" — drops the character, keeps going
- * On a document someone signs, a product name quietly becoming "M" is far worse than
- * one showing a "?" — the "?" is visible, so it gets noticed and fixed.
- *
- * The font covers Latin-1 + Latin Extended-A, so in practice this only fires for
- * Cyrillic, Greek, CJK or emoji.
- */
-export function renderable(text: string): string {
-  let out = ''
-  for (const ch of text) out += RENDERABLE.has(ch) ? ch : REPLACEMENT
-  return out
-}
-
-/**
- * jsPDF's built-in fonts are cp1252, not Unicode. They render á é í ó ú ý ž š fine
- * but silently mangle ě č ř ů ť ď ň — "Předávací" comes out "PYedávací" and ě/č/ď
- * vanish entirely. So we embed a Czech-capable font.
- *
- * Both faces are required. autoTable renders header rows bold; with no bold face
- * registered jsPDF falls back to Helvetica and corrupts just the header, logging a
- * warning rather than throwing. See the diacritics assertion in e2e/protocol.spec.ts.
- */
-let fontsPromise: Promise<Record<string, string>> | null = null
-
-function toBinaryString(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let out = ''
-  const CHUNK = 0x8000 // Spreading the whole array blows the call stack on big fonts.
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    out += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
-  }
-  return out
-}
-
-async function loadFonts(): Promise<Record<string, string>> {
-  fontsPromise ??= (async () => {
-    const entries = await Promise.all(
-      FACES.map(async (face) => {
-        const res = await fetch(`${import.meta.env.BASE_URL}fonts/${face.file}`)
-        if (!res.ok) throw new Error(`Nepodařilo se načíst font ${face.file} (${res.status})`)
-        return [face.file, toBinaryString(await res.arrayBuffer())] as const
-      }),
-    )
-    return Object.fromEntries(entries)
-  })()
-  return fontsPromise
-}
+// Re-exported: callers of this module used it from here before the font setup moved
+// out to be shared with the labels PDF.
+export { renderable }
 
 const fmtDateTime = (ms: number) =>
   new Date(ms).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' })
@@ -96,14 +35,7 @@ export async function buildProtocolPdf(input: ProtocolInput): Promise<Blob> {
   }))
   const settings: Settings = { ...input.settings, company: renderable(input.settings.company) }
 
-  const fonts = await loadFonts()
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-
-  for (const face of FACES) {
-    doc.addFileToVFS(face.file, fonts[face.file]!)
-    doc.addFont(face.file, FONT_FAMILY, face.style)
-  }
-  doc.setFont(FONT_FAMILY, 'normal')
+  const doc = await createPdfDoc()
 
   const M = 15
   const pageW = doc.internal.pageSize.getWidth()

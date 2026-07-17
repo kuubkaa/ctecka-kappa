@@ -53,9 +53,14 @@ export function HomeScreen() {
     <div className="mx-auto flex min-h-full max-w-2xl flex-col">
       <header className="order-1 flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <h1 className="text-2xl font-bold">Inventury</h1>
-        <Link to="/nastaveni" className="rounded-xl px-3 py-2 text-slate-600 active:bg-slate-200">
-          Nastavení
-        </Link>
+        <nav className="flex items-center gap-1">
+          <Link to="/stitky" className="rounded-xl px-3 py-2 text-slate-600 active:bg-slate-200">
+            Štítky
+          </Link>
+          <Link to="/nastaveni" className="rounded-xl px-3 py-2 text-slate-600 active:bg-slate-200">
+            Nastavení
+          </Link>
+        </nav>
       </header>
 
       <main className="order-2 flex-1 px-5 md:order-3 md:pt-4">
