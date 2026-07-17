@@ -117,8 +117,16 @@ function parseCsv(text: string): string[][] {
   return rows
 }
 
-/** Header cells the user is likely to have typed above the codes. */
-const HEADER_WORD = /^(k[oó]d|[čc][áa]rov[ýy]\s*k[oó]d|ean|code|barcode)$/i
+/**
+ * Header cells the user is likely to have typed above the codes.
+ *
+ * The trailing `[\s._/-]*\w*` is not decoration. A header only falls out on its own if
+ * it fails PLAUSIBLE_CODE, and "EAN-13" or "Kod_zbozi" pass it — no spaces, no
+ * diacritics — so without this they arrive as a product called whatever B1 says.
+ * "EAN-13" is the barcode standard's actual name; expecting the user to avoid it is
+ * expecting them to know our regex.
+ */
+const HEADER_WORD = /^(k[oó]d|[čc][áa]rov[ýy]\s*k[oó]d|ean|code|barcode)[\s._/-]*\w*$/i
 
 /**
  * Barcodes are digits, but the scanner also reads CODE-39/128 and QR, which carry

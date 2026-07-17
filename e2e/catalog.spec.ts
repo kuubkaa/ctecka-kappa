@@ -167,6 +167,44 @@ test('a link that is not a Google sheet is refused before anything is fetched', 
   await expect(catalogStatus(page)).toContainText('není odkaz na Google tabulku')
 })
 
+/**
+ * A header only falls out on its own if it doesn't look like a code — and "EAN-13"
+ * looks exactly like one. It is also the barcode standard's real name, so it is a
+ * header people actually write. Getting this wrong invents a product called "Název".
+ */
+test('a header row is dropped whatever it is called, even "EAN-13"', async ({ page }) => {
+  await stubSheet(
+    page,
+    ['"EAN-13","Název zboží"', '"8594001020304","Müsli tyčinka ořechová"'].join('\n'),
+  )
+
+  await page.goto('./')
+  await openSettings(page)
+  await loadSheet(page)
+
+  await expect(dlg(page).getByText('1 druh zboží')).toBeVisible()
+  await expect(dlg(page).getByText('Müsli tyčinka ořechová')).toBeVisible()
+  // The header did not become goods called "Název zboží".
+  await expect(dlg(page).getByText('Název zboží')).toBeHidden()
+  await dlg(page).getByRole('button', { name: 'Načíst' }).click()
+  await expect(catalogStatus(page)).toContainText('1 druh nového zboží')
+})
+
+/** Sheets without a header row are just as valid — row 1 is goods, not a label. */
+test('a sheet with no header row keeps its first line', async ({ page }) => {
+  await stubSheet(
+    page,
+    ['"8594001020304","Müsli tyčinka"', '"8594001020399","Žluté jablko"'].join('\n'),
+  )
+
+  await page.goto('./')
+  await openSettings(page)
+  await loadSheet(page)
+
+  await expect(dlg(page).getByText('2 druhy zboží')).toBeVisible()
+  await expect(dlg(page).getByText('Müsli tyčinka')).toBeVisible()
+})
+
 /** Paste once, use forever — the link is miserable to type on a phone. */
 test('the link is remembered, so the next load is one button', async ({ page }) => {
   await stubSheet(page, '"8594001020304","Müsli tyčinka"')
