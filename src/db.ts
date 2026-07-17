@@ -58,6 +58,26 @@ export interface Item {
   updatedAt: number
 }
 
+/**
+ * A second code for goods that are already in the catalog.
+ *
+ * Scanning something the sheet doesn't list has two different causes, and they need
+ * different answers: goods nobody has named yet (name them — a new Product), and goods
+ * that are in the catalog under another code (link them — this).
+ *
+ * A separate table rather than editing the product, for two reasons. `products.code` is
+ * the primary key and `items` is keyed on it, so re-coding a product would strand every
+ * count already recorded against it. And the sheet is re-read regularly: it would put
+ * the original code straight back, silently undoing the link.
+ */
+export interface Alias {
+  /** The scanned code — a barcode, so globally unique. See schema note 3. */
+  code: string
+  /** The `products.code` this stands for. */
+  productCode: string
+  createdAt: number
+}
+
 export interface Settings {
   key: 'app'
   company: string
@@ -75,6 +95,7 @@ const db = new Dexie(DB_NAME) as Dexie & {
   sessions: EntityTable<Session, 'id'>
   items: Table<Item, [string, string]>
   settings: EntityTable<Settings, 'key'>
+  aliases: EntityTable<Alias, 'code'>
 }
 
 db.version(1).stores({
@@ -93,6 +114,14 @@ db.version(2).stores({
   // updatedAt indexed so the backup reminder can ask "anything newer than the last
   // backup?" without walking every row.
   items: '[sessionId+code], sessionId, updatedAt',
+})
+
+// Version 3 adds the alias table. Additive only — Dexie leaves the other stores alone,
+// and a device that never links a code simply carries an empty table.
+db.version(3).stores({
+  // `productCode` indexed so a product's aliases can be found without a table scan —
+  // needed when goods are forgotten, so the links don't outlive them.
+  aliases: 'code, productCode',
 })
 
 export { db }
@@ -131,15 +160,27 @@ export const codeKey = (code: string) => code.trim().toLocaleUpperCase('cs')
 /**
  * The product a scanned or typed code refers to.
  *
- * Exact hit first, so the common path is a primary-key get. The case-insensitive
- * sweep only runs on a miss — which already stops everything to ask the user a
- * question, so a walk over a few hundred rows is invisible beside that dialog.
+ * Exact hit first, so the common path is a primary-key get. Everything after it only
+ * runs on a miss — which already stops to ask the user a question, so a walk over a few
+ * hundred rows is invisible beside that dialog.
+ *
+ * The catalog is consulted before the aliases: if the sheet has since claimed this code
+ * for real goods, the sheet is the list the user maintains on purpose and wins over a
+ * link made in an aisle months ago.
  */
 async function findProduct(code: string): Promise<Product | undefined> {
   const exact = await db.products.get(code)
   if (exact) return exact
+
   const key = codeKey(code)
-  return db.products.filter((p) => codeKey(p.code) === key).first()
+  const sameCode = await db.products.filter((p) => codeKey(p.code) === key).first()
+  if (sameCode) return sameCode
+
+  const alias =
+    (await db.aliases.get(code)) ?? (await db.aliases.filter((a) => codeKey(a.code) === key).first())
+  // A dangling alias — its goods were forgotten — reads as an unknown code, which is
+  // exactly right: the app genuinely no longer knows what this is.
+  return alias ? db.products.get(alias.productCode) : undefined
 }
 
 export type ScanOutcome =
@@ -161,7 +202,9 @@ export type ScanOutcome =
  * A wrong count is silent, plausible, and ends up on a protocol someone signs.
  */
 export async function recordScan(sessionId: string, code: string): Promise<ScanOutcome> {
-  return db.transaction('rw', db.products, db.items, async () => {
+  // `aliases` is in the transaction because findProduct reads it — Dexie throws on any
+  // table touched outside the declared set.
+  return db.transaction('rw', db.products, db.items, db.aliases, async () => {
     const product = await findProduct(code)
     if (!product) return { kind: 'unknown', code }
 
@@ -191,6 +234,53 @@ export async function nameAndCount(sessionId: string, code: string, name: string
     } else {
       await db.items.add({ sessionId, code, qty: 1, updatedAt: Date.now() })
     }
+  })
+}
+
+/**
+ * Points an unknown code at goods already in the catalog, and counts it — the other
+ * answer to an 'unknown' outcome, when the goods are known but this code isn't.
+ *
+ * The count lands on the existing product, so the stocktake keeps one line for one
+ * product however many codes end up pointing at it.
+ */
+export async function linkAndCount(
+  sessionId: string,
+  code: string,
+  productCode: string,
+): Promise<void> {
+  const clean = code.trim()
+  if (!clean) return
+  await db.transaction('rw', db.products, db.items, db.aliases, async () => {
+    // Refuse to link to goods that aren't there: a dangling alias would quietly behave
+    // like an unknown code and look like the link never happened.
+    if (!(await db.products.get(productCode))) return
+    await db.aliases.put({ code: clean, productCode, createdAt: Date.now() })
+
+    const existing = await db.items.get([sessionId, productCode])
+    if (existing) {
+      await db.items.update([sessionId, productCode], { qty: add(1), updatedAt: Date.now() })
+    } else {
+      await db.items.add({ sessionId, code: productCode, qty: 1, updatedAt: Date.now() })
+    }
+  })
+}
+
+/** Codes linked to a product, so the user can see what a "forget" would take with it. */
+export async function aliasesOf(productCode: string): Promise<Alias[]> {
+  return db.aliases.where({ productCode }).toArray()
+}
+
+/**
+ * Forgets goods and every code pointing at them.
+ *
+ * The aliases have to go too: left behind they would point at nothing, and if the sheet
+ * later reused the code for something else the stale link would be waiting.
+ */
+export async function forgetProduct(productCode: string): Promise<void> {
+  await db.transaction('rw', db.products, db.aliases, async () => {
+    await db.aliases.where({ productCode }).delete()
+    await db.products.delete(productCode)
   })
 }
 

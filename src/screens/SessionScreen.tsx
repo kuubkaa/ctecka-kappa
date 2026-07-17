@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
@@ -8,11 +8,14 @@ import {
   deleteSession,
   getLines,
   getSettings,
+  isNoBarcode,
+  linkAndCount,
   nameAndCount,
   recordScan,
   renameProduct,
   setQty,
   type Line,
+  type Product,
 } from '../db'
 import { entries, pieceWord, pieces } from '../lib/czech'
 import { primeAudio } from '../lib/feedback'
@@ -27,6 +30,9 @@ export function SessionScreen() {
   const [scanning, setScanning] = useState(false)
   const [unknownCode, setUnknownCode] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  /** 'new' = name it; 'link' = it's in the catalog already, under another code. */
+  const [unknownMode, setUnknownMode] = useState<'new' | 'link'>('new')
+  const [linkSearch, setLinkSearch] = useState('')
   // `seq` re-keys the confirmation card so its pop animation replays on every scan.
   const [lastScan, setLastScan] = useState<{ name: string; qty: number; seq: number } | null>(null)
   const [editing, setEditing] = useState<Line | null>(null)
@@ -43,6 +49,26 @@ export function SessionScreen() {
 
   const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId])
   const lines = useLiveQuery(() => getLines(sessionId), [sessionId]) ?? []
+  // Only while the unknown-code dialog is up: the catalog runs to hundreds of rows and
+  // the scan path has no use for it.
+  const catalog = useLiveQuery(
+    () => (unknownCode ? db.products.orderBy('name').toArray() : Promise.resolve([] as Product[])),
+    [unknownCode],
+  )
+
+  const LINK_LIMIT = 25
+  const linkHits = useMemo(() => {
+    const q = linkSearch.trim().toLocaleLowerCase('cs')
+    const all = catalog ?? []
+    if (!q) return all
+    return all.filter(
+      (p) =>
+        p.name.toLocaleLowerCase('cs').includes(q) ||
+        (!isNoBarcode(p.code) && p.code.toLocaleLowerCase('cs').includes(q)),
+    )
+  }, [catalog, linkSearch])
+  const linkMatches = linkHits.slice(0, LINK_LIMIT)
+  const linkHiddenCount = linkHits.length - linkMatches.length
 
   const totalPieces = lines.reduce((sum, l) => sum + l.qty, 0)
 
@@ -51,7 +77,9 @@ export function SessionScreen() {
       const outcome = await recordScan(sessionId, code)
       if (outcome.kind === 'unknown') {
         setNewName('')
-        setUnknownCode(code) // Pauses the scanner until the user names it.
+        setLinkSearch('')
+        setUnknownMode('new')
+        setUnknownCode(code) // Pauses the scanner until the user answers.
         return 'unknown'
       }
       setLastScan({ name: outcome.product.name, qty: outcome.qty, seq: Date.now() })
@@ -65,6 +93,16 @@ export function SessionScreen() {
     if (!code || !newName.trim()) return
     await nameAndCount(sessionId, code, newName)
     setLastScan({ name: newName.trim(), qty: 1, seq: Date.now() })
+    setUnknownCode(null)
+  }
+
+  /** Points the scanned code at goods that are already in the catalog. */
+  async function linkToProduct(productCode: string, name: string) {
+    const code = unknownCode
+    if (!code) return
+    await linkAndCount(sessionId, code, productCode)
+    const qty = (await db.items.get([sessionId, productCode]))?.qty ?? 1
+    setLastScan({ name, qty, seq: Date.now() })
     setUnknownCode(null)
   }
 
@@ -282,26 +320,101 @@ export function SessionScreen() {
         />
       )}
 
-      <Dialog open={unknownCode !== null} title="Nové zboží">
+      <Dialog open={unknownCode !== null} title="Neznámý kód">
         <p className="mb-1 text-sm text-slate-600">Tenhle kód ještě neznám:</p>
         <p className="mb-4 font-mono text-sm font-medium">{unknownCode}</p>
-        <Field
-          label="Název zboží"
-          autoFocus
-          value={newName}
-          placeholder="např. Coca-Cola 0,5 l"
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && saveNewProduct()}
-          hint="Příště už se doplní sám."
-        />
-        <div className="mt-5 flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setUnknownCode(null)}>
-            Přeskočit
-          </Button>
-          <Button className="flex-1" onClick={saveNewProduct} disabled={!newName.trim()}>
-            Uložit a započítat
-          </Button>
-        </div>
+
+        {/* Offered only when there is a catalog to pick from — on a fresh phone the
+            choice would be between naming the goods and an empty list. */}
+        {!!catalog?.length && (
+          <div role="tablist" className="mb-5 flex gap-1 rounded-xl bg-slate-100 p-1">
+            {(
+              [
+                ['new', 'Nové zboží'],
+                ['link', 'Mám ho v katalogu'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                role="tab"
+                aria-selected={unknownMode === mode}
+                onClick={() => setUnknownMode(mode)}
+                className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
+                  unknownMode === mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {unknownMode === 'new' || !catalog?.length ? (
+          <>
+            <Field
+              label="Název zboží"
+              autoFocus
+              value={newName}
+              placeholder="např. Coca-Cola 0,5 l"
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveNewProduct()}
+              hint="Příště už se doplní sám."
+            />
+            <div className="mt-5 flex gap-3">
+              <Button variant="secondary" className="flex-1" onClick={() => setUnknownCode(null)}>
+                Přeskočit
+              </Button>
+              <Button className="flex-1" onClick={saveNewProduct} disabled={!newName.trim()}>
+                Uložit a započítat
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <Field
+              label="Najdi zboží"
+              autoFocus
+              value={linkSearch}
+              placeholder="část názvu nebo kódu"
+              onChange={(e) => setLinkSearch(e.target.value)}
+              hint="Kód se k vybranému zboží přiřadí natrvalo. Příště se započítá sám."
+            />
+            <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto">
+              {linkMatches.map((product) => (
+                <li key={product.code}>
+                  <button
+                    onClick={() => linkToProduct(product.code, product.name)}
+                    className="w-full rounded-xl border border-slate-200 p-3 text-left active:bg-slate-100"
+                  >
+                    <p className="truncate font-medium">{product.name}</p>
+                    {isNoBarcode(product.code) ? (
+                      <p className="truncate text-xs italic text-slate-400">bez čárového kódu</p>
+                    ) : (
+                      <p className="truncate font-mono text-xs text-slate-500">{product.code}</p>
+                    )}
+                  </button>
+                </li>
+              ))}
+              {!linkMatches.length && (
+                <li className="py-6 text-center text-sm text-slate-500">
+                  Nic takového v katalogu není.
+                </li>
+              )}
+              {/* Never truncate silently: a hidden match reads as "it isn't there" and
+                  the user names it again, which is the duplicate row this exists to stop. */}
+              {linkHiddenCount > 0 && (
+                <li className="py-2 text-center text-xs text-slate-500">
+                  …a další {linkHiddenCount}. Zpřesni hledání.
+                </li>
+              )}
+            </ul>
+            <div className="mt-5">
+              <Button variant="secondary" className="w-full" onClick={() => setUnknownCode(null)}>
+                Přeskočit
+              </Button>
+            </div>
+          </>
+        )}
       </Dialog>
 
       <Dialog open={editing !== null} title="Upravit položku" onClose={() => setEditing(null)}>

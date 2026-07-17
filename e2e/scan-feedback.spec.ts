@@ -44,7 +44,7 @@ test('camera scan counts the item and confirms loudly', async ({ page }) => {
   // than invent one. This only fires if the wasm engine read the barcode off the
   // live camera stream.
   const dialog = page.locator('dialog[open]')
-  await expect(dialog.getByRole('heading', { name: 'Nové zboží' })).toBeVisible({ timeout: 15_000 })
+  await expect(dialog.getByRole('heading', { name: 'Neznámý kód' })).toBeVisible({ timeout: 15_000 })
   await expect(dialog.getByText(FAKE_CAMERA_CODE)).toBeVisible()
 
   // An unknown code buzzes differently from a successful count, so the user can tell
@@ -128,7 +128,7 @@ test('the whole screen flashes green on a scan, not just a corner', async ({ pag
   await startScanning(page)
 
   const dialog = page.locator('dialog[open]')
-  await expect(dialog.getByRole('heading', { name: 'Nové zboží' })).toBeVisible({ timeout: 15_000 })
+  await expect(dialog.getByRole('heading', { name: 'Neznámý kód' })).toBeVisible({ timeout: 15_000 })
   await dialog.getByLabel('Název zboží').fill('Müsli tyčinka')
   await dialog.getByRole('button', { name: 'Uložit a započítat' }).click()
 

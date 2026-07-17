@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, getSettings, importCatalog, markBackedUp, renameProduct, saveSettings } from '../db'
+import {
+  db,
+  forgetProduct,
+  getSettings,
+  importCatalog,
+  markBackedUp,
+  renameProduct,
+  saveSettings,
+} from '../db'
 import {
   BackupError,
   backupFileName,
@@ -397,11 +405,13 @@ export function SettingsScreen() {
       <ConfirmDialog
         open={deleteCode !== null}
         title="Zapomenout zboží?"
-        message="Aplikace zapomene název tohoto kódu. Už napočítané kusy v inventurách zůstanou, ale u položky se místo názvu ukáže jen kód."
+        message="Aplikace zapomene název tohoto kódu i všechny kódy, které jsi k němu ručně přiřadil. Už napočítané kusy v inventurách zůstanou, ale u položky se místo názvu ukáže jen kód."
         confirmLabel="Zapomenout"
         onCancel={() => setDeleteCode(null)}
         onConfirm={async () => {
-          if (deleteCode) await db.products.delete(deleteCode)
+          // Takes the aliases with it — left behind they would point at nothing, and a
+          // code the sheet later reused would find a stale link waiting.
+          if (deleteCode) await forgetProduct(deleteCode)
           setDeleteCode(null)
         }}
       />

@@ -2,6 +2,7 @@ import {
   db,
   itemKey,
   newId,
+  type Alias,
   type Item,
   type Product,
   type Session,
@@ -20,11 +21,12 @@ const FORMAT = 'ctecka-kappa-backup'
 /**
  * 1 — pre-sync: numeric session/item ids.
  * 2 — sync-ready: string session ids, items keyed by [sessionId+code].
+ * 3 — adds `aliases`: codes the user linked to goods by hand.
  *
  * `importBackup` must keep reading version 1 forever. Files were handed out before
  * the schema changed, and a backup you can no longer restore is not a backup.
  */
-const FORMAT_VERSION = 2
+const FORMAT_VERSION = 3
 
 export interface Backup {
   format: typeof FORMAT
@@ -34,6 +36,8 @@ export interface Backup {
   sessions: Session[]
   items: Item[]
   settings: Settings[]
+  /** Absent in files written by versions 1 and 2. */
+  aliases?: Alias[]
 }
 
 /** Either format's rows — ids are numbers in v1, strings in v2. */
@@ -43,15 +47,24 @@ type AnyItem = { sessionId: string | number; code: string; qty: number; updatedA
 export async function exportBackup(): Promise<Backup> {
   // One transaction, so a scan landing mid-export can't produce a file where an
   // item references a session that isn't in it.
-  return db.transaction('r', db.products, db.sessions, db.items, db.settings, async () => ({
-    format: FORMAT,
-    version: FORMAT_VERSION,
-    exportedAt: new Date().toISOString(),
-    products: await db.products.toArray(),
-    sessions: await db.sessions.toArray(),
-    items: await db.items.toArray(),
-    settings: await db.settings.toArray(),
-  }))
+  return db.transaction(
+    'r',
+    db.products,
+    db.sessions,
+    db.items,
+    db.settings,
+    db.aliases,
+    async () => ({
+      format: FORMAT,
+      version: FORMAT_VERSION,
+      exportedAt: new Date().toISOString(),
+      products: await db.products.toArray(),
+      sessions: await db.sessions.toArray(),
+      items: await db.items.toArray(),
+      settings: await db.settings.toArray(),
+      aliases: await db.aliases.toArray(),
+    }),
+  )
 }
 
 export function backupFileName(at = new Date()): string {
@@ -99,10 +112,14 @@ export interface ImportResult {
  * Duplicating a stocktake is annoying; erasing one is unrecoverable.
  */
 export async function importBackup(backup: Backup): Promise<ImportResult> {
-  return db.transaction('rw', db.products, db.sessions, db.items, async () => {
+  return db.transaction('rw', db.products, db.sessions, db.items, db.aliases, async () => {
     // Products are keyed by barcode, so the same goods really are the same row.
     // put() lets an imported name correct a local one.
     await db.products.bulkPut(backup.products)
+
+    // Missing in v1 and v2 files, which predate linking. Keyed by the scanned code, so
+    // re-importing the same file is idempotent rather than duplicating links.
+    await db.aliases.bulkPut(backup.aliases ?? [])
 
     // Always re-key, in both formats: a v1 file's session 1 and this device's
     // session 1 are unrelated stocktakes, and even a v2 file could be a restore
