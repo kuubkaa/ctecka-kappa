@@ -20,3 +20,7 @@ blob-report/
 # so the URL is passed to the app via VITE_DEXIE_CLOUD_URL instead.
 dexie-cloud.key
 dexie-cloud.json
+
+# Scratch scripts used while wiring things up — never part of the app.
+*-tmp.mjs
+probe.html
