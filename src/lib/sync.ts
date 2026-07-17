@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { db } from '../db'
+import { CLOUD_URL, db } from '../db'
 import { exportBackup, importBackup } from './backup'
 
 /**
@@ -100,6 +100,43 @@ export async function isEmpty(): Promise<boolean> {
   return sessions === 0 && products === 0
 }
 
+/**
+ * Which sign-in methods the database actually offers — asked, not assumed.
+ *
+ * A "Přihlásit Googlem" button shipped on a guess, and the server answered
+ * `OAuth provider 'google' not configured or not enabled`. It reports the truth at
+ * GET /auth-providers, so ask it: the UI then can't offer something that doesn't
+ * exist, and if a provider is enabled later the button appears on its own.
+ *
+ *     {"providers":[],"otpEnabled":true}   <- this database, today
+ */
+export interface SignInMethods {
+  otp: boolean
+  providers: string[]
+}
+
+export async function availableSignIns(): Promise<SignInMethods> {
+  try {
+    const res = await fetch(`${CLOUD_URL}/auth-providers`)
+    if (!res.ok) throw new Error(String(res.status))
+    const data = (await res.json()) as { providers?: string[]; otpEnabled?: boolean }
+    return { otp: data.otpEnabled !== false, providers: data.providers ?? [] }
+  } catch {
+    // Offline, or the server is unreachable — in which case signing in isn't going
+    // to work anyway. Email is the documented default; offering it and failing
+    // honestly beats offering nothing and explaining nothing.
+    return { otp: true, providers: [] }
+  }
+}
+
+/** Human names for the providers Dexie Cloud can be configured with. */
+export const PROVIDER_LABELS: Record<string, string> = {
+  google: 'Googlem',
+  github: 'GitHubem',
+  microsoft: 'Microsoftem',
+  apple: 'Apple',
+}
+
 export const SIGN_IN_BLOCKED_REASON =
   'Přihlášení tady zatím nenabízím: v aplikaci máš data a při zapínání synchronizace ' +
   'jsem našel chybu, po které by zmizela. Cesta kolem: dej Zálohovat, přihlas se na ' +
@@ -113,9 +150,9 @@ export const SIGN_IN_BLOCKED_REASON =
  * between someone and losing a month of counting. Two independent locks on the one
  * door that has been measured to eat data.
  */
-export async function signIn(method: 'google' | 'email'): Promise<void> {
+export async function signIn(method: 'email' | { provider: string }): Promise<void> {
   if (!(await isEmpty())) throw new NotEmptyError()
-  await db.cloud.login(method === 'google' ? { provider: 'google' } : { grant_type: 'otp' })
+  await db.cloud.login(method === 'email' ? { grant_type: 'otp' } : { provider: method.provider })
 }
 
 /** Give the first post-login sync time to do whatever it is going to do. */

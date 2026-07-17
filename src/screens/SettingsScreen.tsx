@@ -12,7 +12,17 @@ import {
 } from '../lib/backup'
 import { downloadBlob } from '../lib/download'
 import { entries, kinds, stocktakes } from '../lib/czech'
-import { NotEmptyError, SIGN_IN_BLOCKED_REASON, isEmpty, signIn, signOut, useSync } from '../lib/sync'
+import {
+  NotEmptyError,
+  PROVIDER_LABELS,
+  SIGN_IN_BLOCKED_REASON,
+  availableSignIns,
+  isEmpty,
+  signIn,
+  signOut,
+  useSync,
+  type SignInMethods,
+} from '../lib/sync'
 import { Button, ConfirmDialog, Dialog, EmptyState, Field } from '../components/ui'
 
 export function SettingsScreen() {
@@ -32,6 +42,12 @@ export function SettingsScreen() {
   // Sign-in is only offered on an empty app — see NotEmptyError. undefined = still loading,
   // and we must not flash a button we're about to take away.
   const empty = useLiveQuery(() => isEmpty(), [])
+  // Asked, never assumed: a Google button shipped on a guess and the server replied
+  // that no such provider is configured.
+  const [methods, setMethods] = useState<SignInMethods | null>(null)
+  useEffect(() => {
+    void availableSignIns().then(setMethods)
+  }, [])
 
   useEffect(() => {
     void getSettings().then((s) => {
@@ -168,47 +184,52 @@ export function SettingsScreen() {
               Aplikace je prázdná, takže se tu můžeš bezpečně přihlásit — není o co
               přijít. Až budeš přihlášený, načti sem zálohu z telefonu.
             </p>
-            <div className="mt-3 flex gap-3">
-              <Button
-                className="flex-1"
-                disabled={syncBusy}
-                onClick={async () => {
-                  setSyncBusy(true)
-                  setSyncError(null)
-                  try {
-                    await signIn('google')
-                  } catch (err) {
-                    setSyncError(
-                      err instanceof NotEmptyError
-                        ? err.message
-                        : 'Přihlášení přes Google se nepovedlo. Zkus to e-mailem.',
-                    )
-                  } finally {
-                    setSyncBusy(false)
-                  }
-                }}
-              >
-                Přihlásit Googlem
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={syncBusy}
-                onClick={async () => {
-                  setSyncBusy(true)
-                  setSyncError(null)
-                  try {
-                    await signIn('email')
-                  } catch (err) {
-                    setSyncError(
-                      err instanceof NotEmptyError ? err.message : 'Přihlášení se nepovedlo.',
-                    )
-                  } finally {
-                    setSyncBusy(false)
-                  }
-                }}
-              >
-                E-mailem
-              </Button>
+            <div className="mt-3 flex flex-wrap gap-3">
+              {methods?.providers.map((provider) => (
+                <Button
+                  key={provider}
+                  className="flex-1"
+                  disabled={syncBusy}
+                  onClick={async () => {
+                    setSyncBusy(true)
+                    setSyncError(null)
+                    try {
+                      await signIn({ provider })
+                    } catch (err) {
+                      setSyncError(
+                        err instanceof NotEmptyError
+                          ? err.message
+                          : 'Přihlášení se nepovedlo. Zkus to e-mailem.',
+                      )
+                    } finally {
+                      setSyncBusy(false)
+                    }
+                  }}
+                >
+                  Přihlásit {PROVIDER_LABELS[provider] ?? provider}
+                </Button>
+              ))}
+              {methods?.otp && (
+                <Button
+                  className="flex-1"
+                  disabled={syncBusy}
+                  onClick={async () => {
+                    setSyncBusy(true)
+                    setSyncError(null)
+                    try {
+                      await signIn('email')
+                    } catch (err) {
+                      setSyncError(
+                        err instanceof NotEmptyError ? err.message : 'Přihlášení se nepovedlo.',
+                      )
+                    } finally {
+                      setSyncBusy(false)
+                    }
+                  }}
+                >
+                  Přihlásit e-mailem
+                </Button>
+              )}
             </div>
           </>
         ) : empty === false ? (

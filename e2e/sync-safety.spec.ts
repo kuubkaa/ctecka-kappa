@@ -35,9 +35,34 @@ test('an empty app offers sign-in — there is nothing to lose', async ({ page }
   await page.goto('./')
   await page.getByRole('link', { name: 'Nastavení' }).click()
 
-  await expect(syncSection(page).getByRole('button', { name: 'Přihlásit Googlem' })).toBeVisible()
-  await expect(syncSection(page).getByRole('button', { name: 'E-mailem' })).toBeVisible()
+  await expect(syncSection(page).getByRole('button', { name: 'Přihlásit e-mailem' })).toBeVisible()
   await expect(page.getByText(/Aplikace je prázdná/)).toBeVisible()
+})
+
+/**
+ * A "Přihlásit Googlem" button shipped on an assumption, and the server answered
+ * `OAuth provider 'google' not configured or not enabled` — the user found it, not a
+ * test. The methods on offer now come from GET /auth-providers, so the app can only
+ * offer what exists.
+ */
+test('only offers sign-in methods the server actually has', async ({ page }) => {
+  await page.goto('./')
+  // Ask the server the same question the app asks — from the app's origin, since
+  // that's the one the database whitelists.
+  const providers = await page.evaluate(async () =>
+    fetch('https://zuszhwp9s.dexie.cloud/auth-providers').then((r) => r.json()),
+  )
+  await page.getByRole('link', { name: 'Nastavení' }).click()
+  await expect(syncSection(page).getByRole('button', { name: /Přihlásit/ }).first()).toBeVisible()
+
+  const buttons = await syncSection(page).getByRole('button', { name: /Přihlásit/ }).allInnerTexts()
+  const expected = (providers.providers as string[]).length + (providers.otpEnabled ? 1 : 0)
+  expect(buttons, `server nabízí ${JSON.stringify(providers)}`).toHaveLength(expected)
+
+  // Today the server offers no OAuth at all, so no provider button may appear.
+  if (!(providers.providers as string[]).includes('google')) {
+    expect(buttons.join(' ')).not.toContain('Googlem')
+  }
 })
 
 test('an app holding stocktakes offers no sign-in at all', async ({ page }) => {
@@ -45,8 +70,7 @@ test('an app holding stocktakes offers no sign-in at all', async ({ page }) => {
   await countSomething(page)
   await page.getByRole('link', { name: 'Nastavení' }).click()
 
-  await expect(syncSection(page).getByRole('button', { name: 'Přihlásit Googlem' })).toHaveCount(0)
-  await expect(syncSection(page).getByRole('button', { name: 'E-mailem' })).toHaveCount(0)
+  await expect(syncSection(page).getByRole('button', { name: /Přihlásit/ })).toHaveCount(0)
   // And says what to do instead, rather than leaving a dead panel to guess about.
   await expect(page.getByText(/Přihlášení tady zatím nenabízím/)).toBeVisible()
   await expect(page.getByText(/dej Zálohovat/)).toBeVisible()
@@ -69,7 +93,7 @@ test('signIn() refuses outright when data exists, whatever the UI shows', async 
     await nameAndCount(id, '8594001020304', 'Šťavnatá hruška ďábelská')
     try {
       // Would destroy the rows just written, so it must not get as far as a network call.
-      await (window as any).__sync.signIn('google')
+      await (window as any).__sync.signIn('email')
       return { threw: false, code: '' }
     } catch (e: any) {
       // Class names are minified in the production build, so check the stable code.
