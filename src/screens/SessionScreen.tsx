@@ -354,14 +354,24 @@ export function SessionScreen() {
 
         {manualMode === 'code' ? (
           <>
+            {/*
+              A text keyboard, not `inputMode="numeric"`. The numeric keypad has no
+              letters at all, so a code like 311283-194-M was literally untypeable —
+              on the one screen that exists for when a label won't scan. Autocorrect
+              and auto-capitalisation are off for the same reason: a phone "fixing" a
+              product code is never helping.
+            */}
             <Field
-              label="Čárový kód"
+              label="Kód zboží"
               autoFocus
-              inputMode="numeric"
+              inputMode="text"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addManual()}
-              hint="Když je kód poškozený nebo ho čtečka nepřečte."
+              hint="Když je kód poškozený nebo ho čtečka nepřečte. Na velikosti písmen nezáleží."
             />
             <div className="mt-5 flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setManualOpen(false)}>

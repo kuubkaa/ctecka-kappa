@@ -1,0 +1,5 @@
+# One stray NUL byte in a source file makes git call the whole thing binary, and
+# then `git diff` silently shows nothing for it — on this project that would hide
+# changes to db.ts, where every count lives. Force a textual diff regardless.
+*.ts diff
+*.tsx diff

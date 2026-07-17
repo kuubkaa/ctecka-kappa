@@ -142,7 +142,9 @@ export async function buildProtocolPdf(input: ProtocolInput): Promise<Blob> {
 
   autoTable(doc, {
     startY: y,
-    head: [['#', 'Čárový kód', 'Název zboží', 'Počet']],
+    // "Kód zboží", not "Čárový kód": the column also carries internal codes read from
+    // a QR, and those are not bar codes. The word has to fit every row under it.
+    head: [['#', 'Kód zboží', 'Název zboží', 'Počet']],
     // Unlabelled goods carry a synthetic internal id. Printing it on a document
     // someone signs would read as a real barcode and send them hunting for it.
     body: lines.map((l, i) => [

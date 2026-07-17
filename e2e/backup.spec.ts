@@ -30,7 +30,7 @@ async function newSession(page: Page, name: string) {
 
 async function addItem(page: Page, code: string, name: string) {
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await dlg(page).getByLabel('Čárový kód').fill(code)
+  await dlg(page).getByLabel('Kód zboží').fill(code)
   await dlg(page).getByRole('button', { name: 'Započítat' }).click()
   await dlg(page).getByLabel('Název zboží').fill(name)
   await dlg(page).getByRole('button', { name: 'Uložit a započítat' }).click()

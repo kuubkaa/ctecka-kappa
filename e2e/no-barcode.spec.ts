@@ -69,7 +69,7 @@ test('the protocol says "bez kódu", never the synthetic id', async ({ page }) =
 
   // A barcoded item alongside, so we can prove real codes still print.
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await dlg(page).getByLabel('Čárový kód').fill('8594001020304')
+  await dlg(page).getByLabel('Kód zboží').fill('8594001020304')
   await dlg(page).getByRole('button', { name: 'Započítat' }).click()
   await dlg(page).getByLabel('Název zboží').fill('Čokoláda hořká 70 %')
   await dlg(page).getByRole('button', { name: 'Uložit a započítat' }).click()

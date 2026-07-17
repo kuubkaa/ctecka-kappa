@@ -14,6 +14,8 @@
  * before you go, and counting stays entirely offline afterwards.
  */
 
+import { codeKey } from '../db'
+
 /** A row the user is prepared to see counted: a real barcode and what it is called. */
 export interface CatalogRow {
   code: string
@@ -168,11 +170,14 @@ export function parseCatalog(csv: string): CatalogPreview {
       skipped++
       continue
     }
-    const seen = at.get(code)
+    // Keyed case-insensitively, like every lookup in db.ts: "311283-194-M" and
+    // "311283-194-m" are one product, and letting both through would create the pair
+    // of rows that makes a case-insensitive lookup ambiguous.
+    const seen = at.get(codeKey(code))
     // The same barcode twice in one sheet: the lower row wins, matching how a person
     // reads a list top to bottom and how bulkPut would resolve it anyway.
     if (seen !== undefined) rows[seen] = { code, name }
-    else (at.set(code, rows.length), rows.push({ code, name }))
+    else (at.set(codeKey(code), rows.length), rows.push({ code, name }))
   }
 
   // Refuse the whole sheet rather than import the intact half. Scientific notation

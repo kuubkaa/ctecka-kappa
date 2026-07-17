@@ -19,7 +19,7 @@ async function countSomething(page: Page, name = 'Šťavnatá hruška ďábelsk�
   await page.getByRole('button', { name: 'Nová inventura' }).click()
   await page.locator('dialog[open]').getByRole('button', { name: 'Založit' }).click()
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await page.locator('dialog[open]').getByLabel('Čárový kód').fill(FAKE_CAMERA_CODE)
+  await page.locator('dialog[open]').getByLabel('Kód zboží').fill(FAKE_CAMERA_CODE)
   await page.locator('dialog[open]').getByRole('button', { name: 'Započítat' }).click()
   await page.locator('dialog[open]').getByLabel('Název zboží').fill(name)
   await page.locator('dialog[open]').getByRole('button', { name: 'Uložit a započítat' }).click()

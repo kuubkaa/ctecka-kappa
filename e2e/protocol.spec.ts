@@ -12,7 +12,7 @@ const openDialog = (page: Page) => page.locator('dialog[open]')
 
 async function addItem(page: Page, code: string, name: string) {
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await openDialog(page).getByLabel('Čárový kód').fill(code)
+  await openDialog(page).getByLabel('Kód zboží').fill(code)
   await openDialog(page).getByRole('button', { name: 'Započítat' }).click()
   await openDialog(page).getByLabel('Název zboží').fill(name)
   await openDialog(page).getByRole('button', { name: 'Uložit a započítat' }).click()
@@ -67,7 +67,7 @@ test('protocol renders Czech diacritics intact, in body and bold header alike', 
 
   // Bold: autoTable renders headers bold, and a missing bold face makes jsPDF fall
   // back to Helvetica and mangle *only* the header — easy to miss by eye.
-  expect(text).toContain('Čárový kód')
+  expect(text).toContain('Kód zboží')
   expect(text).toContain('Název zboží')
   expect(text).toContain('Předávající')
   expect(text).toContain('Přebírající')
@@ -143,7 +143,7 @@ test('counts repeated scans and lets the user correct quantities', async ({ page
 
   // Same code again: counts up rather than duplicating the line.
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await openDialog(page).getByLabel('Čárový kód').fill('8594001020304')
+  await openDialog(page).getByLabel('Kód zboží').fill('8594001020304')
   await openDialog(page).getByRole('button', { name: 'Započítat' }).click()
   await expect(page.getByText('1 položka · 2 kusy')).toBeVisible()
 
@@ -172,7 +172,7 @@ test('a named barcode is remembered for the next stocktake', async ({ page }) =>
 
   // Second stocktake, same code: no dialog this time — the catalog learned it.
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await openDialog(page).getByLabel('Čárový kód').fill('8594001020304')
+  await openDialog(page).getByLabel('Kód zboží').fill('8594001020304')
   await openDialog(page).getByRole('button', { name: 'Započítat' }).click()
 
   await expect(openDialog(page)).toHaveCount(0)

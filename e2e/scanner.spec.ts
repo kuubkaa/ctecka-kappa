@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { encodeEan13, withCheckDigit } from './ean13'
+import { qrPngDataUrl } from './qr'
 
 /**
  * Proves the scanning engine actually works: that the ~1 MB .wasm we bundle loads
@@ -46,4 +47,38 @@ test('bundled wasm engine decodes an EAN-13 with no network', async ({ page }) =
   // A CDN fallback would pass the decode above and then fail on a phone with no
   // signal — which is where this app lives.
   expect(external).toEqual([])
+})
+
+/**
+ * Goods that carry no EAN get a QR with the firm's own article code on it.
+ *
+ * Two things must hold and neither is obvious: `qr_code` has to survive in FORMATS
+ * (dropping it there is a one-word edit that nothing else would catch), and the
+ * payload has to come back byte-for-byte. Case is the sharp edge — "311283-194-M"
+ * arriving as "311283-194-m" would silently open a second line for one product.
+ */
+test('the engine reads an internal article code from a QR, case intact', async ({ page }) => {
+  const code = '311283-194-M'
+  const png = await qrPngDataUrl(code)
+
+  await page.goto('./e2e/harness.html')
+  await page.waitForFunction(() => (window as any).__harnessReady === true)
+
+  const decoded = await page.evaluate(async (src) => {
+    const img = new Image()
+    img.src = src
+    await img.decode()
+    const canvas = document.createElement('canvas')
+    // Quiet zone. A QR flush to the edge is unreadable, and a test that proved that
+    // would only be testing the test.
+    canvas.width = img.width + 40
+    canvas.height = img.height + 40
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 20, 20)
+    return (window as any).__detect(canvas)
+  }, png)
+
+  expect(decoded).toEqual([{ value: code, format: 'qr_code' }])
 })

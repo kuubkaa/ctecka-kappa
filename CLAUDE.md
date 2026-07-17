@@ -83,6 +83,7 @@
 ├── assets/fonts-src/         # Zdrojové Roboto TTF (vstup pro subsetting)
 ├── e2e/                      # Playwright testy
 │   ├── ean13.ts              # Generátor čárových kódů pro test skeneru
+│   ├── qr.ts                 # Generátor QR (zxing writer, jen v Node)
 │   └── harness.html          # Testovací stránka, přibalí se jen při E2E=1
 ├── public/fonts/             # Ořezaný Roboto pro PDF (generovaný, commitnutý)
 ├── scripts/
@@ -120,6 +121,11 @@
   - ⚠️ **Sheets ničí kódy formátem buňky.** Číselný sloupec udělá z EAN `8,59400E+12` a ukousne nuly na začátku. Scientific notation `catalog.ts` detekuje a **odmítne celou tabulku** s návodem (Formát → Číslo → Prostý text) — půlka katalogu s tichými překlepy v kódech je horší než nic.
   - Odkaz z „Publikovat na webu" (`/d/e/2PACX…/pub`) je jiná adresa a gviz na ní nefunguje; `csvUrlFor()` ji pozná a pošle uživatele na Sdílet → Kopírovat odkaz.
   - Import **přidává a opravuje, nikdy nemaže**. Zboží, které v tabulce není, zůstane — katalog se staví i ručně při skenování a tabulka o těch řádcích neví. Počty se nedotkne (transakce otevírá jen `products`).
+- **Kód nemusí být EAN.** Zboží bez čárového kódu od výrobce dostane vlastní interní kód (`311283-194-M`) vytištěný jako **QR**. Skener ho čte už dnes (`qr_code` je ve `FORMATS`) — ověřeno testem přes skutečný wasm, včetně toho, že se payload vrátí znak po znaku. `e2e/qr.ts` QR generuje zxing **writerem** (běží jen v Node v testu, do buildu appky se nedostane).
+  - **Na velikosti písmen kódu nezáleží** (`codeKey`). Dokud byly kódy EANy, byly to číslice a nepřišlo to na přetřes; interní kód se ale přepisuje ručně, když se QR poškodí, a `-m` místo `-M` by otevřelo druhý řádek pro totéž zboží. Uloží se v té velikosti, jak přišel (je to primární klíč a `items` je na něm klíčované) — porovnává se jen `codeKey`. Platí i pro import z tabulky, jinak by tabulka vyrobila dvojče k ručně naučenému kódu.
+  - Ruční pole má `inputMode="text"`, ne `numeric`: numerická klávesnice **nemá písmena**, takže `311283-194-M` do ní nešlo napsat — zrovna na obrazovce, která existuje pro případ, že štítek nejde načíst. Autocorrect a velká písmena jsou vypnuté; telefon „opravující" kód zboží nikdy nepomáhá.
+  - Hlavička sloupce v protokolu je **„Kód zboží", ne „Čárový kód"** — QR není čárový kód a to slovo musí sedět na každý řádek pod ním.
+- ⚠️ **V `db.ts` byl syrový NUL bajt** (v `itemKey`, jako oddělovač) a kvůli němu git i grep považovaly **celý soubor za binární**: `git diff` mlčky hlásil `0 insertions, 0 deletions` a grep tiše nevracel shody. Napsané jako ` ` je to pro JS totožné a pro nástroje text. `.gitattributes` (`*.ts diff`) to navíc pojistí, kdyby se NUL objevil znovu. Kdyby ti grep na nějakém souboru nesmyslně mlčel, hledej tohle — a radši si soubor přečti.
 - **Zboží bez čárového kódu** (vážené, rozbalené, vlastní výroba) má syntetický interní kód s prefixem `bez-kodu:`. Všechno je klíčované na `code`, takže prázdný být nemůže — ale **nikdy ho nezobrazuj**. Vymyšlené ID na podepisovaném protokolu vypadá jako skutečný čárový kód a pošle člověka hledat ho do regálu. Používej `isNoBarcode()` / `Line.noBarcode`.
 - Volné zboží se slučuje **podle názvu** (bez ohledu na velikost písmen a mezery), ne podle kódu — dva řádky „Jablka" na jednom protokolu jsou vada.
 - **jsPDF tiše maže text.** Když font nemá nějaký znak, jsPDF buď znak zahodí, nebo **uřízne celý zbytek řetězce** — bez chyby. Naměřeno: `"Müsli tyčinka ořechová"` → `"M"`. Proto font pokrývá Latin-1 + Latin Extended-A a `renderable()` v `pdf.ts` propouští jen znaky z `charset.json`. Nikdy nevolej `doc.text()` s nefiltrovaným uživatelským vstupem.

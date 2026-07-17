@@ -77,7 +77,7 @@ test('preset goods are counted straight away, without asking what they are', asy
   await page.getByRole('link', { name: 'Inventury' }).click()
   await newSession(page, 'Inventura z tabulky')
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await dlg(page).getByLabel('Čárový kód').fill('8594001020304')
+  await dlg(page).getByLabel('Kód zboží').fill('8594001020304')
   await dlg(page).getByRole('button', { name: 'Započítat' }).click()
 
   // No "what is this?" prompt — the sheet already answered.
@@ -205,6 +205,85 @@ test('a sheet with no header row keeps its first line', async ({ page }) => {
   await expect(dlg(page).getByText('Müsli tyčinka')).toBeVisible()
 })
 
+/**
+ * Not every product carries an EAN. Goods with the firm's own article code on a QR
+ * must work exactly the same — letters, hyphens and all.
+ */
+test('an internal article code from a QR works like any barcode', async ({ page }) => {
+  await stubSheet(page, '"311283-194-M","Mikina šedá M"')
+
+  await page.goto('./')
+  await openSettings(page)
+  await loadSheet(page)
+  await expect(dlg(page).getByText('311283-194-M')).toBeVisible()
+  await dlg(page).getByRole('button', { name: 'Načíst' }).click()
+
+  await page.getByRole('link', { name: 'Inventury' }).click()
+  await newSession(page, 'Textil')
+  await page.getByRole('button', { name: 'Ručně' }).click()
+  await dlg(page).getByLabel('Kód zboží').fill('311283-194-M')
+  await dlg(page).getByRole('button', { name: 'Započítat' }).click()
+
+  await expect(dlg(page)).toHaveCount(0)
+  await expect(page.getByText('Mikina šedá M')).toBeVisible()
+})
+
+/**
+ * The manual screen exists for when a label won't scan — which means somebody is
+ * thumbing an article code into a phone. Shift is not a thing that happens there, and
+ * a second line for one product on a signed protocol is a defect.
+ */
+test('a hand-typed code in the wrong case tops up the line, never opens a second', async ({
+  page,
+}) => {
+  await stubSheet(page, '"311283-194-M","Mikina šedá M"')
+
+  await page.goto('./')
+  await openSettings(page)
+  await loadSheet(page)
+  await dlg(page).getByRole('button', { name: 'Načíst' }).click()
+
+  await page.getByRole('link', { name: 'Inventury' }).click()
+  await newSession(page, 'Textil')
+  for (const typed of ['311283-194-M', '311283-194-m', ' 311283-194-m ']) {
+    await page.getByRole('button', { name: 'Ručně' }).click()
+    await dlg(page).getByLabel('Kód zboží').fill(typed)
+    await dlg(page).getByRole('button', { name: 'Započítat' }).click()
+    // Never asks "what is this?" — it is the same sweatshirt every time.
+    await expect(dlg(page)).toHaveCount(0)
+  }
+
+  await expect(page.getByText('1 položka · 3 kusy')).toBeVisible()
+  // One line, and it shows the code as the sheet spells it.
+  await expect(page.getByText('311283-194-M')).toBeVisible()
+})
+
+/**
+ * The reverse order: the code is learned by hand first, in whatever case, and the
+ * sheet arrives later. It must land on the existing goods rather than beside them.
+ */
+test('the sheet lands on goods already learned in another case', async ({ page }) => {
+  await page.goto('./')
+  await newSession(page, 'Textil')
+  await page.getByRole('button', { name: 'Ručně' }).click()
+  await dlg(page).getByLabel('Kód zboží').fill('311283-194-m')
+  await dlg(page).getByRole('button', { name: 'Započítat' }).click()
+  await dlg(page).getByLabel('Název zboží').fill('mikina')
+  await dlg(page).getByRole('button', { name: 'Uložit a započítat' }).click()
+
+  await stubSheet(page, '"311283-194-M","Mikina šedá M"')
+  await openSettings(page)
+  await loadSheet(page)
+  await dlg(page).getByRole('button', { name: 'Načíst' }).click()
+  // Corrected, not added alongside.
+  await expect(catalogStatus(page)).toContainText('1 přejmenovaného')
+
+  await page.getByRole('link', { name: 'Inventury' }).click()
+  await page.getByText('Textil').click()
+  await expect(page.getByText('Mikina šedá M')).toBeVisible()
+  await expect(page.getByText('1 položka · 1 kus')).toBeVisible()
+})
+
 /** Paste once, use forever — the link is miserable to type on a phone. */
 test('the link is remembered, so the next load is one button', async ({ page }) => {
   await stubSheet(page, '"8594001020304","Müsli tyčinka"')
@@ -230,12 +309,12 @@ test('the sheet fixes a name without disturbing the count', async ({ page }) => 
   await page.goto('./')
   await newSession(page, 'Rozpočítaná')
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await dlg(page).getByLabel('Čárový kód').fill('8594001020304')
+  await dlg(page).getByLabel('Kód zboží').fill('8594001020304')
   await dlg(page).getByRole('button', { name: 'Započítat' }).click()
   await dlg(page).getByLabel('Název zboží').fill('musli')
   await dlg(page).getByRole('button', { name: 'Uložit a započítat' }).click()
   await page.getByRole('button', { name: 'Ručně' }).click()
-  await dlg(page).getByLabel('Čárový kód').fill('8594001020304')
+  await dlg(page).getByLabel('Kód zboží').fill('8594001020304')
   await dlg(page).getByRole('button', { name: 'Započítat' }).click()
   await expect(page.getByText('1 položka · 2 kusy')).toBeVisible()
 
