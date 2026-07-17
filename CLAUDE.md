@@ -19,8 +19,8 @@
 ## Stack
 - Framework: Vite 8 + React 19 + TypeScript 6 (statická SPA, žádný server)
 - UI: Tailwind CSS v4, vlastní komponenty (`src/components/ui.tsx`), font Roboto
-- Databáze: IndexedDB v zařízení (Dexie 4) + volitelná synchronizace přes Dexie Cloud
-- Auth: volitelná — appka funguje bez přihlášení, přihlášení jen zapíná synchronizaci
+- Databáze: IndexedDB v zařízení (Dexie 4). **Žádná synchronizace** — přenos dat mezi zařízeními jde přes zálohu (JSON).
+- Auth: **žádná**
 - Skenování: `barcode-detector` (ponyfill nad zxing-wasm)
 - PDF: jsPDF 4 + jspdf-autotable 5 + vestavěný ořezaný Roboto
 - PWA: vite-plugin-pwa (offline, instalace na plochu)
@@ -101,17 +101,14 @@
 - Role neexistují — aplikace je jednouživatelská. Na role se neptej.
 
 ## Nuance projektu
-- 🔴 **PŘIHLÁŠENÍ MAŽE LOKÁLNÍ DATA — proto je vypnuté.** Naměřeno proti reálné DB: napočítej inventuru bez přihlášení, přihlas se → za ~2 s je pryč (0 inventur, 0 položek), bez chyby. Řádky zapsané odhlášeným patří uživateli `unauthorized`; přihlášením se změní totožnost a server takové řádky nezná.
-  - **Mazání NENÍ součástí přihlašovacího syncu.** `syncState.phase` je `in-sync` ve chvíli, kdy data ještě existují — smazání přijde až potom. Proto pojistka „počkej na dosynchronizování a zkontroluj" **prokazatelně nefunguje** (`signInPreservingData` v `lib/sync.ts` — nechána jako výchozí bod, ne k použití).
-  - **Směr opravy:** po přihlášení odsouzené řádky sám smaž a znovu naimportuj zálohu jako přihlášený uživatel. Musí to přežít pád stránky uprostřed (kopie nesmí být jen v paměti).
-  - **Nevyřešeno:** jestli to dělá addon, nebo můj testovací postroj (překonfigurovává `db.cloud` po otevření — appka to nikdy nedělá). Skutečnou přihlašovací cestu nešlo otestovat: OTP i demo grant čekají na interakci v okně.
-  - Hlídá to `e2e/sync-safety.spec.ts` — smaž ty testy jedině spolu s testem, který dokáže, že data přihlášení přežijí.
-- **Synchronizace je dobrovolná a viditelná.** `requireAuth: false` — appka nikdy nesmí chtít přihlášení, používá se ve skladu bez signálu. Přihlášení zapíná sync a je v Nastavení. Stav syncu je **vždy vidět** (`useSync`) — uživatel výslovně žádal, aby se nic nevyplo potichu.
-- **`nameSuffix: false` je povinné.** Dexie Cloud jinak připojí ID databáze k názvu (`ctecka-kappa-sync-zuszhwp9s`). Verze bez přípony už je nasazená na reálných zařízeních — přejmenování by tam trvale uvěznilo data a appka by vypadala prázdná, ne rozbitá.
-- **`disableEagerSync: true` + časovač po 10 s.** Free tarif dovolí 50 synchronizací / 5 min na uživatele; sync po každé změně by při 30 skenech za minutu udělal ~150.
-- **`tryUseServiceWorker: false`** — náš SW generuje vite-plugin-pwa (`generateSW`), dexie-cloud chce `injectManifest`. SW je volitelný, přidával by jen sync na pozadí, který se u nárazově používaného nástroje stejně nespustí.
-- **Účet musí být `prod`, ne `eval`.** Zkušební účty po ~30 dnech **tiše přestanou synchronizovat**. `jakubmilotinsky@gmail.com` je nastavený na `prod` (ověřeno: token vrací `userType: prod` bez `evalDaysLeft`). Nový uživatel = nastavit přes `POST {dbUrl}/users` `[{userId, type:'prod'}]`.
-- **Dvojitý klíč `[sessionId+code]` synchronizací projde** — ověřeno proti reálné databázi (addon to v kódu povoluje, ale nikde to není zdokumentované).
+- **Aplikace se nesynchronizuje. Data na jiné zařízení přenáší jen záloha (JSON).** Rozhodnuto po ověření, že by data ležela na Azure **eastus (USA)** — a na protokolu jsou jména lidí. Připomínka zálohy (`BackupReminder`) je náhrada za sync, ne doplněk.
+- **Připomínka smí otravovat jen když je co ztratit** (`needsBackup()` = něco přibylo od poslední zálohy) a **nikdy přes kameru ani přes jiný dialog**. Chycené testem: dialog přes hledáček člověku na štaflích je horší než žádná připomínka. Po odložení 6 h ticho — připomínku, se kterou uživatel bojuje, uživatel porazí.
+- **Dexie Cloud je vyházený**, ale co jsem zjistil, ať se to nemusí objevovat znovu:
+  - Přihlášení **maže lokální data** zapsaná před ním (naměřeno: ~2 s po přihlášení 0 inventur). Řádky odhlášeného patří `unauthorized`; přihlášením se změní totožnost a server je nezná. **Mazání není součástí přihlašovacího syncu** — `syncState.phase` je `in-sync`, když data ještě jsou, takže „počkej a zkontroluj" prokazatelně nefunguje. Směr: po přihlášení odsouzené řádky sám smazat a naimportovat zálohu jako přihlášený (musí přežít pád stránky).
+  - Nevyřešeno, jestli to dělá addon, nebo testovací postroj (překonfigurovával `db.cloud` po otevření). Skutečná přihlašovací cesta nešla otestovat — OTP i demo grant čekají na interakci.
+  - **Ptej se serveru, nehádej:** `GET {dbUrl}/auth-providers` → `{"providers":[],"otpEnabled":true}`. Nasadil jsem tlačítko „Přihlásit Googlem" na základě domněnky; uživateli vyhodilo `OAuth provider 'google' not configured`.
+  - `nameSuffix: false` je povinné, jinak addon přejmenuje lokální DB a uvězní data.
+  - Účet `jakubmilotinsky@gmail.com` je na DB `zuszhwp9s.dexie.cloud` nastavený na `prod` (nevyprší).
 - **Počty NIKDY neupravuj stylem „přečti a zapiš".** Používej `add(delta)` z Dexie (`recordScan`, `nameAndCount`, `addWithoutBarcode`, `bumpQty`). Serializuje se jako pokyn `{"@@propmod":{"add":1}}`, ne jako hotová hodnota, a server ho vyhodnotí proti aktuálnímu stavu. Bez toho: telefon offline napočítá 50, PC zároveň nastaví 3 → výsledek 50 nebo 3, nikdy 53. Tiše a na podepisovaném protokolu.
   - `setQty` je schválně absolutní — uživatel říká „na regálu jich je 48", to musí přebít starší počet.
   - ⚠️ **Testy tohle neověří** (ověřeno mutací: read-modify-write je nechá zelené). Na jednom zařízení transakce rozdíl schová. Skutečné ověření přijde až se synchronizací.

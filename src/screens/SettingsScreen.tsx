@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, getSettings, renameProduct, saveSettings } from '../db'
+import { db, getSettings, markBackedUp, renameProduct, saveSettings } from '../db'
 import {
   BackupError,
   backupFileName,
@@ -12,17 +12,6 @@ import {
 } from '../lib/backup'
 import { downloadBlob } from '../lib/download'
 import { entries, kinds, stocktakes } from '../lib/czech'
-import {
-  NotEmptyError,
-  PROVIDER_LABELS,
-  SIGN_IN_BLOCKED_REASON,
-  availableSignIns,
-  isEmpty,
-  signIn,
-  signOut,
-  useSync,
-  type SignInMethods,
-} from '../lib/sync'
 import { Button, ConfirmDialog, Dialog, EmptyState, Field } from '../components/ui'
 
 export function SettingsScreen() {
@@ -34,21 +23,7 @@ export function SettingsScreen() {
   const [pending, setPending] = useState<Backup | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
-  const sync = useSync()
-  const [syncBusy, setSyncBusy] = useState(false)
-  const [syncError, setSyncError] = useState<string | null>(null)
-
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), [])
-  // Sign-in is only offered on an empty app — see NotEmptyError. undefined = still loading,
-  // and we must not flash a button we're about to take away.
-  const empty = useLiveQuery(() => isEmpty(), [])
-  // Asked, never assumed: a Google button shipped on a guess and the server replied
-  // that no such provider is configured.
-  const [methods, setMethods] = useState<SignInMethods | null>(null)
-  useEffect(() => {
-    void availableSignIns().then(setMethods)
-  }, [])
-
   useEffect(() => {
     void getSettings().then((s) => {
       setCompany(s.company)
@@ -69,6 +44,7 @@ export function SettingsScreen() {
       const backup = await exportBackup()
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
       downloadBlob(blob, backupFileName())
+      await markBackedUp()
       setNotice({
         kind: 'ok',
         text: `Záloha stažena — ${stocktakes(backup.sessions.length)}, ${entries(backup.items.length)}.`,
@@ -120,124 +96,6 @@ export function SettingsScreen() {
         ‹ Inventury
       </Link>
       <h1 className="mb-6 mt-1 text-2xl font-bold">Nastavení</h1>
-
-      {/* Sync is stated, never guessed. The one thing the user asked for was that it
-          must not switch itself off quietly — so its real state is always on screen,
-          including the states we'd rather not admit to. */}
-      <section className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="font-semibold">Synchronizace s počítačem</h2>
-        <div className="mt-3 flex items-start gap-3">
-          <span
-            aria-hidden
-            className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
-              {
-                ok: 'bg-emerald-500',
-                syncing: 'bg-sky-500 animate-pulse',
-                off: 'bg-slate-300',
-                offline: 'bg-amber-500',
-                error: 'bg-amber-500',
-                expired: 'bg-red-500',
-              }[sync.health]
-            }`}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium" role="status">
-              {sync.message}
-            </p>
-            {sync.detail && <p className="mt-0.5 text-sm text-slate-500">{sync.detail}</p>}
-            {sync.user && <p className="mt-1 truncate text-xs text-slate-400">{sync.user}</p>}
-          </div>
-        </div>
-
-        {syncError && (
-          <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">
-            {syncError}
-          </p>
-        )}
-
-        {sync.user ? (
-          <div className="mt-4">
-            <Button
-              variant="secondary"
-              className="w-full"
-              disabled={syncBusy}
-              onClick={async () => {
-                setSyncBusy(true)
-                setSyncError(null)
-                try {
-                  await signOut()
-                } catch {
-                  // Dexie refuses to log out while changes are still unsynced, which
-                  // is the right answer — say so instead of dropping the counts.
-                  setSyncError('Ještě se neodeslaly všechny změny. Zkus to za chvíli.')
-                } finally {
-                  setSyncBusy(false)
-                }
-              }}
-            >
-              Odhlásit
-            </Button>
-          </div>
-        ) : empty === true ? (
-          <>
-            <p className="mt-4 rounded-xl bg-sky-50 p-3 text-sm text-sky-900">
-              Aplikace je prázdná, takže se tu můžeš bezpečně přihlásit — není o co
-              přijít. Až budeš přihlášený, načti sem zálohu z telefonu.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {methods?.providers.map((provider) => (
-                <Button
-                  key={provider}
-                  className="flex-1"
-                  disabled={syncBusy}
-                  onClick={async () => {
-                    setSyncBusy(true)
-                    setSyncError(null)
-                    try {
-                      await signIn({ provider })
-                    } catch (err) {
-                      setSyncError(
-                        err instanceof NotEmptyError
-                          ? err.message
-                          : 'Přihlášení se nepovedlo. Zkus to e-mailem.',
-                      )
-                    } finally {
-                      setSyncBusy(false)
-                    }
-                  }}
-                >
-                  Přihlásit {PROVIDER_LABELS[provider] ?? provider}
-                </Button>
-              ))}
-              {methods?.otp && (
-                <Button
-                  className="flex-1"
-                  disabled={syncBusy}
-                  onClick={async () => {
-                    setSyncBusy(true)
-                    setSyncError(null)
-                    try {
-                      await signIn('email')
-                    } catch (err) {
-                      setSyncError(
-                        err instanceof NotEmptyError ? err.message : 'Přihlášení se nepovedlo.',
-                      )
-                    } finally {
-                      setSyncBusy(false)
-                    }
-                  }}
-                >
-                  Přihlásit e-mailem
-                </Button>
-              )}
-            </div>
-          </>
-        ) : empty === false ? (
-          <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-            {SIGN_IN_BLOCKED_REASON}
-          </p>
-        ) : null}
-      </section>
 
       <section className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="font-semibold">Hlavička protokolu</h2>

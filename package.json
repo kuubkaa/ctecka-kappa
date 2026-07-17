@@ -18,7 +18,6 @@
   "dependencies": {
     "barcode-detector": "3.2.1",
     "dexie": "4.4.4",
-    "dexie-cloud-addon": "^4.4.13",
     "dexie-react-hooks": "^1.1.7",
     "jspdf": "4.2.1",
     "jspdf-autotable": "5.0.8",

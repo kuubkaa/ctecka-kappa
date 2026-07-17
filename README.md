@@ -6,9 +6,10 @@ na konci ti vygeneruje předávací protokol v PDF k vytištění a podpisu.
 Běží v prohlížeči na Androidu, iPhonu i na počítači a dá se přidat na plochu jako
 normální aplikace. **Funguje offline** — ve skladu, kde nechytá signál.
 
-Bez přihlášení jsou data jen v zařízení. Po přihlášení se navíc synchronizují mezi
-telefonem a počítačem. Appka přihlášení **nikdy nevyžaduje**: počítat a tisknout
-protokoly jde vždy, i bez sítě a bez účtu.
+**Data jsou jen v zařízení** — žádný server, žádné přihlašování, žádný účet.
+Na počítač je dostaneš zálohou: v Nastavení *Zálohovat*, soubor přeneseš, na
+počítači *Načíst zálohu*. Appka sama připomene, že je potřeba zálohovat, jakmile
+od poslední zálohy něco přibylo.
 
 ## Spuštění na počítači
 

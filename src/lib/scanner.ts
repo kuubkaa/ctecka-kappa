@@ -43,6 +43,22 @@ export function createDetector(): BarcodeDetector {
   return new BarcodeDetector({ formats: [...FORMATS] })
 }
 
+/**
+ * Whether a viewfinder is on screen right now.
+ *
+ * Nothing may interrupt scanning: the user is up a ladder pointing a phone at a
+ * shelf, and a dialog over the camera at that moment is worse than useless. A
+ * counter rather than a boolean, so a remount can't leave it stuck on.
+ */
+let openScanners = 0
+export const isScannerOpen = () => openScanners > 0
+export function markScannerOpen(): () => void {
+  openScanners++
+  return () => {
+    openScanners--
+  }
+}
+
 export class CameraError extends Error {
   constructor(
     message: string,

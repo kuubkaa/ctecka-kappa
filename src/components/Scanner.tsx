@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   CameraError,
   createDetector,
+  markScannerOpen,
   openCamera,
   setTorch,
   stopCamera,
@@ -57,6 +58,9 @@ export function Scanner({ onDetect, onClose, status, paused = false }: Props) {
     video.srcObject = stream
     void video.play().catch(() => {})
   }, [])
+
+  // Tell the rest of the app to stay out of the way while the camera is up.
+  useEffect(() => markScannerOpen(), [])
 
   useEffect(() => {
     let cancelled = false
