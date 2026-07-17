@@ -11,7 +11,8 @@ import {
   type Backup,
 } from '../lib/backup'
 import { downloadBlob } from '../lib/download'
-import { entries } from '../lib/czech'
+import { entries, kinds, stocktakes } from '../lib/czech'
+import { signIn, signInWithEmail, signOut, useSync } from '../lib/sync'
 import { Button, ConfirmDialog, Dialog, EmptyState, Field } from '../components/ui'
 
 export function SettingsScreen() {
@@ -23,6 +24,9 @@ export function SettingsScreen() {
   const [pending, setPending] = useState<Backup | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const sync = useSync()
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), [])
 
@@ -48,7 +52,7 @@ export function SettingsScreen() {
       downloadBlob(blob, backupFileName())
       setNotice({
         kind: 'ok',
-        text: `Záloha stažena — ${entries(backup.items.length)}, ${backup.sessions.length} inventur.`,
+        text: `Záloha stažena — ${stocktakes(backup.sessions.length)}, ${entries(backup.items.length)}.`,
       })
     } catch {
       setNotice({ kind: 'err', text: 'Zálohu se nepodařilo vytvořit.' })
@@ -82,7 +86,7 @@ export function SettingsScreen() {
       const added = await importBackup(backup)
       setNotice({
         kind: 'ok',
-        text: `Načteno: ${added.sessions} inventur, ${entries(added.items)}, ${added.products} druhů zboží.`,
+        text: `Načteno: ${stocktakes(added.sessions)}, ${entries(added.items)}, ${kinds(added.products)} zboží.`,
       })
     } catch {
       setNotice({ kind: 'err', text: 'Zálohu se nepodařilo načíst. Data zůstala beze změny.' })
@@ -97,6 +101,103 @@ export function SettingsScreen() {
         ‹ Inventury
       </Link>
       <h1 className="mb-6 mt-1 text-2xl font-bold">Nastavení</h1>
+
+      {/* Sync is stated, never guessed. The one thing the user asked for was that it
+          must not switch itself off quietly — so its real state is always on screen,
+          including the states we'd rather not admit to. */}
+      <section className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
+        <h2 className="font-semibold">Synchronizace s počítačem</h2>
+        <div className="mt-3 flex items-start gap-3">
+          <span
+            aria-hidden
+            className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+              {
+                ok: 'bg-emerald-500',
+                syncing: 'bg-sky-500 animate-pulse',
+                off: 'bg-slate-300',
+                offline: 'bg-amber-500',
+                error: 'bg-amber-500',
+                expired: 'bg-red-500',
+              }[sync.health]
+            }`}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium" role="status">
+              {sync.message}
+            </p>
+            {sync.detail && <p className="mt-0.5 text-sm text-slate-500">{sync.detail}</p>}
+            {sync.user && <p className="mt-1 truncate text-xs text-slate-400">{sync.user}</p>}
+          </div>
+        </div>
+
+        {syncError && (
+          <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">
+            {syncError}
+          </p>
+        )}
+
+        <div className="mt-4 flex gap-3">
+          {sync.user ? (
+            <Button
+              variant="secondary"
+              className="flex-1"
+              disabled={syncBusy}
+              onClick={async () => {
+                setSyncBusy(true)
+                setSyncError(null)
+                try {
+                  await signOut()
+                } catch {
+                  // Dexie refuses to log out while changes are still unsynced, which
+                  // is the right answer — say so instead of dropping the counts.
+                  setSyncError('Ještě se neodeslaly všechny změny. Zkus to za chvíli.')
+                } finally {
+                  setSyncBusy(false)
+                }
+              }}
+            >
+              Odhlásit
+            </Button>
+          ) : (
+            <>
+              <Button
+                className="flex-1"
+                disabled={syncBusy}
+                onClick={async () => {
+                  setSyncBusy(true)
+                  setSyncError(null)
+                  try {
+                    await signIn()
+                  } catch {
+                    setSyncError('Přihlášení přes Google se nepovedlo. Zkus to e-mailem.')
+                  } finally {
+                    setSyncBusy(false)
+                  }
+                }}
+              >
+                Přihlásit Googlem
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={syncBusy}
+                onClick={async () => {
+                  setSyncBusy(true)
+                  setSyncError(null)
+                  try {
+                    await signInWithEmail()
+                  } catch {
+                    setSyncError('Přihlášení se nepovedlo.')
+                  } finally {
+                    setSyncBusy(false)
+                  }
+                }}
+              >
+                E-mailem
+              </Button>
+            </>
+          )}
+        </div>
+      </section>
 
       <section className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="font-semibold">Hlavička protokolu</h2>
@@ -114,9 +215,10 @@ export function SettingsScreen() {
           onBlur={() => persist({ defaultPlace })}
           hint="Předvyplní se u každé nové inventury."
         />
-        <p className={`text-sm text-emerald-600 transition-opacity ${saved ? '' : 'opacity-0'}`}>
-          Uloženo
-        </p>
+        {/* Rendered only when true. It used to be always present at opacity-0, which
+            reads as "visible" to a test — so anything waiting for the save to land
+            passed instantly and verified nothing. */}
+        <p className="h-5 text-sm text-emerald-600">{saved ? 'Uloženo' : ''}</p>
       </section>
 
       <section className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
@@ -208,9 +310,9 @@ export function SettingsScreen() {
       <Dialog open={pending !== null} title="Načíst zálohu?" onClose={() => setPending(null)}>
         <p className="mb-3 text-slate-600">Záloha obsahuje:</p>
         <ul className="mb-4 space-y-1 text-sm text-slate-700">
-          <li>• {pending?.sessions.length ?? 0} inventur</li>
+          <li>• {stocktakes(pending?.sessions.length ?? 0)}</li>
           <li>• {entries(pending?.items.length ?? 0)}</li>
-          <li>• {pending?.products.length ?? 0} druhů naučeného zboží</li>
+          <li>• {kinds(pending?.products.length ?? 0)} naučeného zboží</li>
           {pending && (
             <li className="text-slate-500">
               • pořízeno {new Date(pending.exportedAt).toLocaleString('cs-CZ')}

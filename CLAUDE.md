@@ -19,8 +19,8 @@
 ## Stack
 - Framework: Vite 8 + React 19 + TypeScript 6 (statická SPA, žádný server)
 - UI: Tailwind CSS v4, vlastní komponenty (`src/components/ui.tsx`), font Roboto
-- Databáze: **žádná** — data žijí v telefonu v IndexedDB přes Dexie 4
-- Auth: **žádná** — aplikace je jednouživatelská a offline
+- Databáze: IndexedDB v zařízení (Dexie 4) + volitelná synchronizace přes Dexie Cloud
+- Auth: volitelná — appka funguje bez přihlášení, přihlášení jen zapíná synchronizaci
 - Skenování: `barcode-detector` (ponyfill nad zxing-wasm)
 - PDF: jsPDF 4 + jspdf-autotable 5 + vestavěný ořezaný Roboto
 - PWA: vite-plugin-pwa (offline, instalace na plochu)
@@ -63,8 +63,9 @@
 - Všechny mazací akce musí mít potvrzovací dialog (`ConfirmDialog`)
 
 ### Bezpečnost
-- Aplikace nemá server, přihlášení ani cizí data — klasická rizika (SQL injection, CSRF, auth) tu neexistují.
-- Data jsou nešifrovaná v telefonu. Kdo má odemčený telefon, má i inventuru. Pro tenhle případ užití je to v pořádku; kdyby přibyla citlivá data, přehodnotit.
+- Data jsou nešifrovaná v telefonu. Kdo má odemčený telefon, má i inventuru.
+- Po přihlášení data leží i u Dexie Cloud. `dexie-cloud.key` = klíč ke správě databáze, **je v .gitignore a repozitář je veřejný** — nikdy ho necommituj.
+- URL databáze tajná není (stejně je v klientovi) a přístup chrání přihlášení + whitelist adres.
 - Pokud najdeš riziko, zapiš do `security_warnings.md` v rootu
 
 ### Grafika a UI
@@ -100,6 +101,12 @@
 - Role neexistují — aplikace je jednouživatelská. Na role se neptej.
 
 ## Nuance projektu
+- **Synchronizace je dobrovolná a viditelná.** `requireAuth: false` — appka nikdy nesmí chtít přihlášení, používá se ve skladu bez signálu. Přihlášení zapíná sync a je v Nastavení. Stav syncu je **vždy vidět** (`useSync`) — uživatel výslovně žádal, aby se nic nevyplo potichu.
+- **`nameSuffix: false` je povinné.** Dexie Cloud jinak připojí ID databáze k názvu (`ctecka-kappa-sync-zuszhwp9s`). Verze bez přípony už je nasazená na reálných zařízeních — přejmenování by tam trvale uvěznilo data a appka by vypadala prázdná, ne rozbitá.
+- **`disableEagerSync: true` + časovač po 10 s.** Free tarif dovolí 50 synchronizací / 5 min na uživatele; sync po každé změně by při 30 skenech za minutu udělal ~150.
+- **`tryUseServiceWorker: false`** — náš SW generuje vite-plugin-pwa (`generateSW`), dexie-cloud chce `injectManifest`. SW je volitelný, přidával by jen sync na pozadí, který se u nárazově používaného nástroje stejně nespustí.
+- **Účet musí být `prod`, ne `eval`.** Zkušební účty po ~30 dnech **tiše přestanou synchronizovat**. `jakubmilotinsky@gmail.com` je nastavený na `prod` (ověřeno: token vrací `userType: prod` bez `evalDaysLeft`). Nový uživatel = nastavit přes `POST {dbUrl}/users` `[{userId, type:'prod'}]`.
+- **Dvojitý klíč `[sessionId+code]` synchronizací projde** — ověřeno proti reálné databázi (addon to v kódu povoluje, ale nikde to není zdokumentované).
 - **Počty NIKDY neupravuj stylem „přečti a zapiš".** Používej `add(delta)` z Dexie (`recordScan`, `nameAndCount`, `addWithoutBarcode`, `bumpQty`). Serializuje se jako pokyn `{"@@propmod":{"add":1}}`, ne jako hotová hodnota, a server ho vyhodnotí proti aktuálnímu stavu. Bez toho: telefon offline napočítá 50, PC zároveň nastaví 3 → výsledek 50 nebo 3, nikdy 53. Tiše a na podepisovaném protokolu.
   - `setQty` je schválně absolutní — uživatel říká „na regálu jich je 48", to musí přebít starší počet.
   - ⚠️ **Testy tohle neověří** (ověřeno mutací: read-modify-write je nechá zelené). Na jednom zařízení transakce rozdíl schová. Skutečné ověření přijde až se synchronizací.

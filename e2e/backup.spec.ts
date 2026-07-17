@@ -55,12 +55,16 @@ async function saveBackup(page: Page, dir: string): Promise<string> {
   return path
 }
 
+/** The backup section's own live region — Settings also has one for sync status. */
+const backupStatus = (page: Page) =>
+  page.locator('section', { hasText: 'Záloha' }).getByRole('status')
+
 async function restore(page: Page, path: string) {
   await openSettings(page)
   await page.getByLabel('Vybrat soubor se zálohou').setInputFiles(path)
   await expect(dlg(page).getByRole('heading', { name: 'Načíst zálohu?' })).toBeVisible()
   await dlg(page).getByRole('button', { name: 'Načíst' }).click()
-  await expect(page.getByRole('status')).toContainText('Načteno')
+  await expect(backupStatus(page)).toContainText('Načteno')
 }
 
 test('backs up everything and restores it onto another device', async ({
@@ -172,13 +176,13 @@ test('a file that is not our backup is refused, not half-imported', async ({ pag
   const junk = join(testInfo.outputDir, 'neco-jineho.json')
   await writeFile(junk, JSON.stringify({ hello: 'world' }))
   await page.getByLabel('Vybrat soubor se zálohou').setInputFiles(junk)
-  await expect(page.getByRole('status')).toContainText('není záloha z této aplikace')
+  await expect(backupStatus(page)).toContainText('není záloha z této aplikace')
   await expect(dlg(page)).toHaveCount(0)
 
   const broken = join(testInfo.outputDir, 'rozbity.json')
   await writeFile(broken, 'tohle rozhodně není JSON {{{')
   await page.getByLabel('Vybrat soubor se zálohou').setInputFiles(broken)
-  await expect(page.getByRole('status')).toContainText('nejde přečíst')
+  await expect(backupStatus(page)).toContainText('nejde přečíst')
 
   // Data untouched throughout.
   await page.getByRole('link', { name: 'Inventury' }).click()

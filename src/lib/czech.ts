@@ -25,9 +25,13 @@ function form(n: number, forms: Forms): string {
 
 const PIECE: Forms = { one: 'kus', few: 'kusy', other: 'kusů' }
 const ENTRY: Forms = { one: 'položka', few: 'položky', other: 'položek' }
+const STOCKTAKE: Forms = { one: 'inventura', few: 'inventury', other: 'inventur' }
+const KIND: Forms = { one: 'druh', few: 'druhy', other: 'druhů' }
 
 /** Just the noun, correctly declined — for when the number is displayed separately. */
 export const pieceWord = (n: number) => form(n, PIECE)
 
 export const pieces = (n: number) => `${n.toLocaleString('cs-CZ')} ${form(n, PIECE)}`
 export const entries = (n: number) => `${n.toLocaleString('cs-CZ')} ${form(n, ENTRY)}`
+export const stocktakes = (n: number) => `${n.toLocaleString('cs-CZ')} ${form(n, STOCKTAKE)}`
+export const kinds = (n: number) => `${n.toLocaleString('cs-CZ')} ${form(n, KIND)}`

@@ -3,9 +3,12 @@
 Mobilní aplikace pro inventuru skladu. Naskenuješ čárový kód, appka počítá kusy,
 na konci ti vygeneruje předávací protokol v PDF k vytištění a podpisu.
 
-Běží v prohlížeči na Androidu i iPhonu a dá se přidat na plochu jako normální
-aplikace. **Data zůstávají v telefonu** — žádný server, žádné přihlašování, funguje
-i tam, kde nechytá signál.
+Běží v prohlížeči na Androidu, iPhonu i na počítači a dá se přidat na plochu jako
+normální aplikace. **Funguje offline** — ve skladu, kde nechytá signál.
+
+Bez přihlášení jsou data jen v zařízení. Po přihlášení se navíc synchronizují mezi
+telefonem a počítačem. Appka přihlášení **nikdy nevyžaduje**: počítat a tisknout
+protokoly jde vždy, i bez sítě a bez účtu.
 
 ## Spuštění na počítači
 

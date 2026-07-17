@@ -109,6 +109,8 @@ test('session ids become globally unique, so two devices cannot collide', async 
   await expect(page.getByText('Červnová inventura')).toBeVisible()
 
   const ids = await page.evaluate(async () => {
+    // Name must stay unsuffixed — dexie-cloud would otherwise append the cloud db
+    // id and strand data written by the already-shipped version.
     const open = indexedDB.open('ctecka-kappa-sync')
     const db: IDBDatabase = await new Promise((res, rej) => {
       open.onsuccess = () => res(open.result)

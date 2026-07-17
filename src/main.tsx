@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import { App } from './App'
-import { migrateFromLegacy } from './db'
+import { migrateFromLegacy, startSync } from './db'
 import { warmUpScanner } from './lib/scanner'
 import './index.css'
 
@@ -31,6 +31,8 @@ migrateFromLegacy()
     console.error('Migrace ze starší verze selhala; stará data zůstala nedotčená.', err)
   })
   .finally(() => {
+    // After the migration, so the timer never races rows still being copied across.
+    startSync()
     root.render(
       <StrictMode>
         <App />
