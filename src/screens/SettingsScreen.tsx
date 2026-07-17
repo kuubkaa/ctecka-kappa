@@ -209,9 +209,21 @@ export function SettingsScreen() {
 
       <section className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="font-semibold">Zboží z tabulky</h2>
-        <p className="mt-1 mb-4 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-500">
           Když si zboží vypíšeš do Google tabulky, aplikace se při skenování nebude ptát na
-          názvy. <strong>První sloupec čárový kód, druhý název.</strong> Čte se první list.
+          názvy. <strong>První sloupec kód, druhý název.</strong> Čte se první list.
+        </p>
+        {/*
+          Said up front, not only in the error afterwards. Čárové kódy are 13-digit
+          numbers, so a General-format column is the normal case rather than an edge
+          one: Google renders long ones as 8,59400E+12 (caught on import) and eats
+          leading zeros (not caught — nothing in the file says a digit is missing).
+          One sentence here is cheaper than either.
+        */}
+        <p className="mt-2 mb-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+          Sloupec s kódy nejdřív označ a dej <strong>Formát → Číslo → Prostý text</strong>.
+          Jinak z nich Google udělá čísla a ukousne nuly na začátku — kód pak při skenování
+          nesedne a nepoznáš proč.
         </p>
         <Field
           label="Odkaz na tabulku"
