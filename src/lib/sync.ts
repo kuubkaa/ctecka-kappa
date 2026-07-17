@@ -80,16 +80,31 @@ export function useSync(): SyncInfo {
 }
 
 /**
- * Signs in. Google first because that's the account the user already has; the addon
- * falls back to an emailed code if the server offers no OAuth provider.
+ * 🔴 SIGN-IN IS DISABLED — IT DESTROYS DATA.
+ *
+ * Measured, not theorised. Count a stocktake while logged out, then log in:
+ *
+ *     before login:  1 stocktake, 2 items
+ *     1s after:      1 stocktake, 2 items
+ *     2s after:      0 stocktakes, 0 items      <-- gone, silently
+ *
+ * Rows written while logged out belong to the `unauthorized` user. Logging in
+ * switches identity, the first sync finds no such rows on the server, and the local
+ * ones are pruned. The user is left with an app that looks brand new.
+ *
+ * The UI must not offer a button that can do this, so it doesn't. Sync stays off
+ * and says so; counting, protocols and backup are unaffected.
+ *
+ * Not yet established: whether this is the addon's real behaviour on login, or an
+ * artefact of the test harness reconfiguring db.cloud after open (something the app
+ * never does). Until that's answered and a data-preserving path is proven, the
+ * button stays out. An app that doesn't sync yet is a disappointment; an app that
+ * eats a warehouse's worth of counting is not survivable.
  */
-export async function signIn(): Promise<void> {
-  await db.cloud.login({ provider: 'google' })
-}
-
-export async function signInWithEmail(email?: string): Promise<void> {
-  await db.cloud.login(email ? { email, grant_type: 'otp' } : { grant_type: 'otp' })
-}
+export const SIGN_IN_DISABLED_REASON =
+  'Přihlašování je dočasně vypnuté — při zapínání synchronizace jsem našel chybu, ' +
+  'po které by se data v telefonu smazala. Než ji opravím, zůstává vypnuté. ' +
+  'Počítání, protokoly i záloha fungují normálně.'
 
 /**
  * Signs out. `force: false` on purpose — Dexie refuses while changes are still

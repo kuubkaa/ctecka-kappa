@@ -55,9 +55,16 @@ async function saveBackup(page: Page, dir: string): Promise<string> {
   return path
 }
 
-/** The backup section's own live region — Settings also has one for sync status. */
+/**
+ * The backup section's own live region — Settings also has one for sync status.
+ * Matched by heading, not by text: hasText is a case-insensitive substring match,
+ * and the sync section's copy mentions "záloha" too.
+ */
 const backupStatus = (page: Page) =>
-  page.locator('section', { hasText: 'Záloha' }).getByRole('status')
+  page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Záloha', exact: true }) })
+    .getByRole('status')
 
 async function restore(page: Page, path: string) {
   await openSettings(page)
@@ -158,7 +165,7 @@ test('two devices that both numbered a stocktake "1" do not fuse into one', asyn
   await restore(pc, path)
 
   await pc.getByRole('link', { name: 'Inventury' }).click()
-  await pc.getByText('Telefon').click()
+  await pc.getByText('Telefon', { exact: true }).click()
   await expect(pc.getByText('Zboží z telefonu')).toBeVisible()
   await expect(pc.getByText('Zboží z počítače')).toBeHidden()
   await expect(pc.getByText('1 položka · 1 kus')).toBeVisible()

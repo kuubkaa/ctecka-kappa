@@ -12,7 +12,7 @@ import {
 } from '../lib/backup'
 import { downloadBlob } from '../lib/download'
 import { entries, kinds, stocktakes } from '../lib/czech'
-import { signIn, signInWithEmail, signOut, useSync } from '../lib/sync'
+import { SIGN_IN_DISABLED_REASON, signOut, useSync } from '../lib/sync'
 import { Button, ConfirmDialog, Dialog, EmptyState, Field } from '../components/ui'
 
 export function SettingsScreen() {
@@ -136,11 +136,11 @@ export function SettingsScreen() {
           </p>
         )}
 
-        <div className="mt-4 flex gap-3">
-          {sync.user ? (
+        {sync.user ? (
+          <div className="mt-4">
             <Button
               variant="secondary"
-              className="flex-1"
+              className="w-full"
               disabled={syncBusy}
               onClick={async () => {
                 setSyncBusy(true)
@@ -158,45 +158,12 @@ export function SettingsScreen() {
             >
               Odhlásit
             </Button>
-          ) : (
-            <>
-              <Button
-                className="flex-1"
-                disabled={syncBusy}
-                onClick={async () => {
-                  setSyncBusy(true)
-                  setSyncError(null)
-                  try {
-                    await signIn()
-                  } catch {
-                    setSyncError('Přihlášení přes Google se nepovedlo. Zkus to e-mailem.')
-                  } finally {
-                    setSyncBusy(false)
-                  }
-                }}
-              >
-                Přihlásit Googlem
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={syncBusy}
-                onClick={async () => {
-                  setSyncBusy(true)
-                  setSyncError(null)
-                  try {
-                    await signInWithEmail()
-                  } catch {
-                    setSyncError('Přihlášení se nepovedlo.')
-                  } finally {
-                    setSyncBusy(false)
-                  }
-                }}
-              >
-                E-mailem
-              </Button>
-            </>
-          )}
-        </div>
+          </div>
+        ) : (
+          <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+            {SIGN_IN_DISABLED_REASON}
+          </p>
+        )}
       </section>
 
       <section className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">

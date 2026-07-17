@@ -26,6 +26,18 @@
       // is not reachable by clicking, because the UI awaits each action in turn.
       window.__db = db
 
+      /**
+       * Signs in as an arbitrary identity using a token minted from the management
+       * credentials, so a machine can verify cross-device sync without a human
+       * reading an emailed code. The app itself never gets this: fetchTokens is
+       * added here, not in db.ts.
+       */
+      window.__testSignIn = async (token) => {
+        db.db.cloud.configure({ ...db.db.cloud.options, fetchTokens: async () => token })
+        await db.db.cloud.login({ email: token.claims.sub })
+        return db.db.cloud.currentUserId
+      }
+
       window.__harnessReady = true
     </script>
   </body>
